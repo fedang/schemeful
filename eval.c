@@ -115,10 +115,14 @@ any_sexp_t eval_equal(any_sexp_t sexp, any_sexp_t env)
         return ANY_SEXP_ERROR;
 
     if (ANY_SEXP_IS_STRING(a) && ANY_SEXP_IS_STRING(b))
-        return any_sexp_number(!strcmp(ANY_SEXP_GET_STRING(a), ANY_SEXP_GET_STRING(b)));
+        return !strcmp(ANY_SEXP_GET_STRING(a), ANY_SEXP_GET_STRING(b))
+             ? any_sexp_number(1)
+             : ANY_SEXP_NIL;
 
     if (ANY_SEXP_IS_NUMBER(a) && ANY_SEXP_IS_NUMBER(b))
-        return any_sexp_number(ANY_SEXP_GET_NUMBER(a) == ANY_SEXP_GET_NUMBER(b));
+        return ANY_SEXP_GET_NUMBER(a) == ANY_SEXP_GET_NUMBER(b)
+             ? any_sexp_number(1)
+             : ANY_SEXP_NIL;
 
     log_error("Incompatible arguments to =");
     return ANY_SEXP_ERROR;
@@ -142,6 +146,31 @@ any_sexp_t eval_print(any_sexp_t sexp, any_sexp_t env)
     printf("\n");
 
     return eval_print(any_sexp_cdr(sexp), env);
+}
+
+any_sexp_t eval_if(any_sexp_t sexp, any_sexp_t env)
+{
+    any_sexp_t car = any_sexp_car(sexp);
+    any_sexp_t cdr = any_sexp_cdr(sexp);
+    any_sexp_t cadr = any_sexp_car(cdr);
+
+    any_sexp_t cddr = any_sexp_cdr(cdr);
+    any_sexp_t caddr = any_sexp_car(cddr);
+
+    if (!ANY_SEXP_IS_CONS(sexp) || !ANY_SEXP_IS_CONS(cdr) ||
+        !ANY_SEXP_IS_CONS(cddr) || !ANY_SEXP_IS_NIL(any_sexp_cdr(cddr))) {
+        log_error("Malformed if");
+        return ANY_SEXP_ERROR;
+    }
+
+    any_sexp_t cond = eval(car, env);
+    if (ANY_SEXP_IS_ERROR(cond))
+        return ANY_SEXP_ERROR;
+
+    if (!ANY_SEXP_IS_NIL(cond))
+        return eval(cadr, env);
+
+    return eval(caddr, env);
 }
 
 any_sexp_t eval_cons(any_sexp_cons_t *cons, any_sexp_t env)
@@ -254,6 +283,13 @@ any_sexp_t eval_cons(any_sexp_cons_t *cons, any_sexp_t env)
             return any_sexp_cdr(list);
         }
 
+        // (if a b c)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "if")) {
+            log_trace("If");
+            return eval_if(cons->cdr, env);
+        }
+
         // (lambda (a b c ...) exp)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "lambda")) {
@@ -332,8 +368,12 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env)
             return ANY_SEXP_ERROR;
         }
 
+        any_sexp_t value = eval(caddr, *env);
+        if (ANY_SEXP_IS_ERROR(value))
+            return ANY_SEXP_ERROR;
+
         log_trace("Define (%s)", ANY_SEXP_GET_SYMBOL(cadr));
-        *env = any_sexp_cons(any_sexp_cons(cadr, eval(caddr, *env)), *env);
+        *env = any_sexp_cons(any_sexp_cons(cadr, value), *env);
         return ANY_SEXP_NIL;
     }
 
