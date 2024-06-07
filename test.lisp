@@ -17,3 +17,35 @@
 (print
   (((lambda (x) (x x)) (lambda (x) x)) "it works!"))
 
+;; Define example
+(define nil?
+  (lambda (x)
+    (= (tag? x) (tag? '()))))
+
+(print (nil? 1))
+(print (nil? '()))
+
+;; Y Combinator
+(define Y
+  (lambda (f)
+    ((lambda (g) (g g))
+     (lambda (g)
+       (f (lambda x ((g g) x)))))))
+
+(define fac
+  (Y (lambda (f)
+       (lambda (n)
+         (if (= n 0)
+           1
+           (* n (f (+ x -1))))))))
+
+(print (fac 10))
+
+(define len
+  (Y (lambda (f)
+       (lambda (l)
+         (if (nil? l)
+           0
+           (+ 1 (f (cdr l))))))))
+
+(print (len '(a b c)))
