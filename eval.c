@@ -235,3 +235,15 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
     }
 }
 
+void eval_file(FILE *file, any_sexp_t env)
+{
+    any_sexp_reader_t reader;
+    any_sexp_reader_file_init(&reader, file);
+
+    any_sexp_t sexp;
+    do {
+        sexp = any_sexp_read(&reader);
+        eval(sexp, env);
+        any_sexp_free_list(sexp);
+    } while (!ANY_SEXP_IS_ERROR(sexp));
+}

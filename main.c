@@ -52,16 +52,7 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        any_sexp_reader_t reader;
-        any_sexp_reader_file_init(&reader, file);
-
-        any_sexp_t sexp;
-        do {
-            sexp = any_sexp_read(&reader);
-            eval(sexp, ANY_SEXP_NIL);
-            any_sexp_free_list(sexp);
-        } while (!ANY_SEXP_IS_ERROR(sexp));
-
+        eval_file(file, ANY_SEXP_NIL);
         return 0;
     }
 

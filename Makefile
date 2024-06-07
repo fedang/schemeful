@@ -1,3 +1,4 @@
+CFLAGS = -ggdb
 
 SRCS = $(wildcard *.c)
 OBJS = $(SRCS:.c=.o)
