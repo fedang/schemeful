@@ -65,11 +65,12 @@ typedef void *any_sexp_t;
 #define ANY_SEXP_ERROR (any_sexp_t)UINTPTR_MAX
 #define ANY_SEXP_NIL   (any_sexp_t)NULL
 
-#define ANY_SEXP_BITS_SHIFT  (sizeof(uintptr_t) * 8 - 4)
-#define ANY_SEXP_UNTAG(sexp) (any_sexp_t)((uintptr_t)(sexp) & ~((uintptr_t)0xf << ANY_SEXP_BITS_SHIFT))
+#define ANY_SEXP_BIT_SHIFT  (sizeof(uintptr_t) * 8 - 4)
+#define ANY_SEXP_BIT_SIGN   ((uintptr_t)1 << (ANY_SEXP_BIT_SHIFT - 1))
+#define ANY_SEXP_UNTAG(sexp) (any_sexp_t)((uintptr_t)(sexp) & ~((uintptr_t)0xf << ANY_SEXP_BIT_SHIFT))
 
-#define ANY_SEXP_TAG(sexp, tag)   (any_sexp_t)((uintptr_t)(sexp) | ((uintptr_t)tag << ANY_SEXP_BITS_SHIFT))
-#define ANY_SEXP_GET_TAG(sexp)    (((uintptr_t)(sexp) >> ANY_SEXP_BITS_SHIFT) & 0xf)
+#define ANY_SEXP_TAG(sexp, tag)   (any_sexp_t)((uintptr_t)(sexp) | ((uintptr_t)tag << ANY_SEXP_BIT_SHIFT))
+#define ANY_SEXP_GET_TAG(sexp)    (((uintptr_t)(sexp) >> ANY_SEXP_BIT_SHIFT) & 0xf)
 #define ANY_SEXP_GET_CONS(sexp)   ((any_sexp_cons_t *)ANY_SEXP_UNTAG(sexp))
 #define ANY_SEXP_GET_SYMBOL(sexp) (((char *)ANY_SEXP_UNTAG(sexp)))
 #define ANY_SEXP_GET_STRING(sexp) (((char *)ANY_SEXP_UNTAG(sexp)))
@@ -78,12 +79,11 @@ typedef void *any_sexp_t;
 static inline intptr_t any_sexp_number_untag(any_sexp_t sexp)
 {
     uintptr_t ptr = (uintptr_t)ANY_SEXP_UNTAG(sexp);
-    uintptr_t sign_bit = (uintptr_t)1 << (ANY_SEXP_BITS_SHIFT - 1);
-    uintptr_t clear = ptr & ~(sign_bit | (uintptr_t)0xf << ANY_SEXP_BITS_SHIFT);
+    uintptr_t clear = ptr & ~((uintptr_t)0x1f << (ANY_SEXP_BIT_SHIFT - 1));
 
     // NOTE: Pad with 1's to adjust the two's complement when the sign is negative
-    if (ptr & sign_bit)
-        clear |= (uintptr_t)0x1f << (ANY_SEXP_BITS_SHIFT - 1);
+    if (ptr & ANY_SEXP_BIT_SIGN)
+        clear |= (uintptr_t)0x1f << (ANY_SEXP_BIT_SHIFT - 1);
     return *(intptr_t *)&clear;
 }
 
@@ -278,8 +278,8 @@ static void any_sexp_reader_skip(any_sexp_reader_t *reader)
 static char any_sexp_reader_string_getc(any_sexp_reader_string_t *string)
 {
     return string->cursor < string->length
-		 ? string->source[string->cursor++]
-		 : EOF;
+         ? string->source[string->cursor++]
+         : EOF;
 }
 
 void any_sexp_reader_init(any_sexp_reader_t *reader, any_sexp_getchar_t getc, void *stream)
@@ -411,7 +411,7 @@ static int any_sexp_writer_puts(any_sexp_writer_t *writer, const char *string)
 
 static int any_sexp_writer_putnum(any_sexp_writer_t *writer, intptr_t value)
 {
-    int c;
+    int c = 0;
     if (value > 9) {
         c = any_sexp_writer_putnum(writer, value / 10);
         value %= 10;
@@ -435,16 +435,17 @@ int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp)
         case ANY_SEXP_TAG_ERROR:
             return any_sexp_writer_puts(writer, "<error>");
 
-        case ANY_SEXP_TAG_NIL:
-            return writer->putc(ANY_SEXP_CHAR_OPEN,  writer->stream) == EOF
-                || writer->putc(ANY_SEXP_CHAR_CLOSE, writer->stream) == EOF
-                ? EOF : 2;
+        case ANY_SEXP_TAG_NIL: {
+            const char nil[3] = { ANY_SEXP_CHAR_OPEN, ANY_SEXP_CHAR_CLOSE, '\0' };
+            return any_sexp_writer_puts(writer, nil);
+        }
 
         case ANY_SEXP_TAG_CONS: {
+            any_sexp_t car = any_sexp_car(sexp), cdr = any_sexp_cdr(sexp);
+
 #ifndef ANY_SEXP_NO_QUOTE
-            any_sexp_t cdr = any_sexp_cdr(sexp);
-            if (ANY_SEXP_IS_SYMBOL(any_sexp_car(sexp)) && ANY_SEXP_IS_NIL(any_sexp_cdr(cdr)) &&
-                !strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), ANY_SEXP_QUOTE_SYMBOL)) {
+            if (ANY_SEXP_IS_SYMBOL(car) && ANY_SEXP_IS_NIL(any_sexp_cdr(cdr)) &&
+                !strcmp(ANY_SEXP_GET_SYMBOL(car), ANY_SEXP_QUOTE_SYMBOL)) {
 
                 if (writer->putc(ANY_SEXP_CHAR_QUOTE, writer->stream) == EOF)
                     return EOF;
@@ -457,19 +458,28 @@ int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp)
                 return EOF;
 
             int c = 2, tmp;
-            while (!ANY_SEXP_IS_NIL(sexp) && !ANY_SEXP_IS_ERROR(sexp)) {
-                tmp = any_sexp_write(writer, any_sexp_car(sexp));
-                sexp = any_sexp_cdr(sexp);
-
+            while (true) {
+                tmp = any_sexp_write(writer, car);
                 if (tmp == EOF)
                     return EOF;
+                c += tmp;
 
-                if (!ANY_SEXP_IS_NIL(sexp)) {
+                if (ANY_SEXP_IS_CONS(cdr)) {
                     if (writer->putc(' ', writer->stream) == EOF)
                         return EOF;
-                    tmp++;
-                }
-                c += tmp;
+
+                    car = any_sexp_car(cdr);
+                    cdr = any_sexp_cdr(cdr);
+                    c++;
+                } else if (!ANY_SEXP_IS_NIL(cdr)) {
+                    if (any_sexp_writer_puts(writer, " . ") == EOF)
+                        return EOF;
+
+                    car = cdr;
+                    cdr = ANY_SEXP_NIL;
+                    c += 3;
+                } else
+                    break;
             }
 
             if (writer->putc(ANY_SEXP_CHAR_CLOSE, writer->stream) == EOF)
@@ -590,12 +600,11 @@ any_sexp_t any_sexp_number(intptr_t value)
 #ifndef ANY_SEXP_NO_BOXING
     // Handle the sign bit!
 
-    uintptr_t sign_bit = (uintptr_t)1 << (ANY_SEXP_BITS_SHIFT - 1);
     uintptr_t sexp = *(uintptr_t *)&value;
-    sexp &= ~(sign_bit | (uintptr_t)0xf << ANY_SEXP_BITS_SHIFT);
+    sexp &= ~((uintptr_t)0x1f << (ANY_SEXP_BIT_SHIFT - 1));
 
     if (value < 0)
-        sexp |= sign_bit;
+        sexp |= ANY_SEXP_BIT_SIGN;
 
     return ANY_SEXP_TAG(sexp, ANY_SEXP_TAG_NUMBER);
 #else

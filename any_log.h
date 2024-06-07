@@ -142,15 +142,15 @@ typedef enum {
 //       f        | double                       | "%lf"
 //       s        | char * (0-terminated)        | "%s"
 //
-//       c        | any_log_formatter_t (function), void *
+//       g        | any_log_formatter_t (function), void *
 //
 // If no type specifier is given the function will assume the type given
 // by ANY_LOG_VALUE_DEFAULT_TYPE (by default string).
 //
-// You can log custom types with the 'c' specifier. Then you will have to
-// pass two parameters: a format function of type any_log_formatter_t and
-// a value parameter of type void *.
-// By defining ANY_LOG_NO_CUSTOM you can disable the custom type specifier.
+// The 'g' specifier is handled differently than the others. It needs two parameters,
+// the first must be a custom formatter function (of type any_log_formatter_t) to
+// format the second value of type void *.
+// By defining ANY_LOG_NO_CUSTOM you can disable this custom type specifier.
 //
 // Example usage of value logging
 //
@@ -160,7 +160,7 @@ typedef enum {
 //                   "p:window", window_handle,
 //                   "f:scale", scale_factor_dpi,
 //                   "b:hidden", visibility == HIDDEN,
-//                   "c:widgets", ANY_LOG_FORMATTER(widget_format), widgets,
+//                   "g:widgets", ANY_LOG_FORMATTER(widget_format), widgets,
 //                   "appname", "nice app");
 //
 // In the implementation you can customize the format of every key-value pair
@@ -180,6 +180,7 @@ typedef enum {
 //    #define ANY_LOG_VALUE_DOUBLE(key, value) "\"%s\": %lf", key, value
 //    #define ANY_LOG_VALUE_STRING(key, value) "\"%s \": \"%s\"", key, value
 //    #define ANY_LOG_VALUE_AFTER(level, module, func, message) "}\n"
+//    #define ANY_LOG_NO_CUSTOM
 //    #include "any_log.h"
 //
 // As with log_trace and log_debug, log_value_trace and log_value_debug can be
@@ -609,7 +610,7 @@ void any_log_value(any_log_level_t level, const char *module,
                 }
 
 #ifndef ANY_LOG_NO_CUSTOM
-                case 'c': {
+                case 'g': {
                     any_log_formatter_t formatter = va_arg(args, any_log_formatter_t);
                     void *value = va_arg(args, void *);
                     ANY_LOG_VALUE_CUSTOM(key, any_log_stream, formatter, value);

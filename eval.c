@@ -235,7 +235,33 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
     }
 }
 
-void eval_file(FILE *file, any_sexp_t env)
+any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env)
+{
+    // (define sym value)
+    //
+    if (ANY_SEXP_IS_CONS(sexp) && ANY_SEXP_IS_SYMBOL(any_sexp_car(sexp)) &&
+        !strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), "define")) {
+
+        any_sexp_t cdr = any_sexp_cdr(sexp);
+        any_sexp_t cadr = any_sexp_car(cdr);
+        any_sexp_t cddr = any_sexp_cdr(cdr);
+        any_sexp_t caddr = any_sexp_car(cddr);
+
+        if (!ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_CONS(cddr) ||
+            !ANY_SEXP_IS_NIL(any_sexp_cdr(cddr)) || !ANY_SEXP_IS_SYMBOL(cadr)) {
+            log_error("Malformed define");
+            return ANY_SEXP_ERROR;
+        }
+
+        log_trace("Define (%s)", ANY_SEXP_GET_SYMBOL(cadr));
+        *env = any_sexp_cons(any_sexp_cons(cadr, eval(caddr, *env)), *env);
+        return ANY_SEXP_NIL;
+    }
+
+    return eval(sexp, *env);
+}
+
+void eval_file(FILE *file, any_sexp_t *env)
 {
     any_sexp_reader_t reader;
     any_sexp_reader_file_init(&reader, file);
@@ -243,7 +269,7 @@ void eval_file(FILE *file, any_sexp_t env)
     any_sexp_t sexp;
     do {
         sexp = any_sexp_read(&reader);
-        eval(sexp, env);
-        any_sexp_free_list(sexp);
+        eval_define(sexp, env);
+        //any_sexp_free_list(sexp);
     } while (!ANY_SEXP_IS_ERROR(sexp));
 }

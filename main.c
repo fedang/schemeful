@@ -6,9 +6,17 @@
 #define ANY_LOG_IMPLEMENT
 #include "any_log.h"
 
+void print_env(any_sexp_t env)
+{
+    log_info("Environment:");
+    any_sexp_print(env);
+    printf("\n");
+}
+
 void repl()
 {
     printf("My own little lisp :)\n");
+    any_sexp_t env = ANY_SEXP_NIL;
 
     any_sexp_reader_t reader;
     any_sexp_reader_string_t string;
@@ -31,9 +39,12 @@ void repl()
 
         any_sexp_print(sexp);
         printf("\n===>\n");
-        any_sexp_print(eval(sexp, ANY_SEXP_NIL));
-        any_sexp_free_list(sexp);
+        any_sexp_print(eval_define(sexp, &env));
+        //any_sexp_free_list(sexp);
     }
+
+    print_env(env);
+    any_sexp_free_list(env);
 }
 
 int main(int argc, char **argv)
@@ -52,7 +63,10 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        eval_file(file, ANY_SEXP_NIL);
+        any_sexp_t env = ANY_SEXP_NIL;
+        eval_file(file, &env);
+        print_env(env);
+        any_sexp_free_list(env);
         return 0;
     }
 
