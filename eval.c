@@ -55,6 +55,25 @@ bool eval_is_lambda(any_sexp_t sexp)
         && eval_is_symbol_list(cadr);
 }
 
+bool eval_is_let(any_sexp_t sexp)
+{
+    // (cons 'let (cons (cons id (cons value nil)) (cons body nil)))
+    //
+    any_sexp_t car = any_sexp_car(sexp);
+    any_sexp_t cadr = any_sexp_car(any_sexp_cdr(sexp));
+    any_sexp_t cddr = any_sexp_cdr(any_sexp_cdr(sexp));
+    any_sexp_t caddr = any_sexp_car(cddr);
+
+    return ANY_SEXP_IS_CONS(sexp)
+        && ANY_SEXP_IS_SYMBOL(car)
+        && !strcmp(ANY_SEXP_GET_SYMBOL(car), "let")
+        && ANY_SEXP_IS_CONS(cddr)
+        && ANY_SEXP_IS_NIL(any_sexp_cdr(cddr))
+        && ANY_SEXP_IS_CONS(cadr)
+        && ANY_SEXP_IS_SYMBOL(any_sexp_car(cadr))
+        && ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(cadr)));
+}
+
 bool eval_find_fvs(const char *symbol, any_sexp_t fvs)
 {
     if (ANY_SEXP_IS_NIL(fvs))
@@ -103,6 +122,13 @@ any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
             return eval_get_fvs(body, eval_merge_fvs(sub_pars, pars));
         }
 
+        if (eval_is_let(sexp)) {
+            any_sexp_t name = any_sexp_car(any_sexp_car(any_sexp_cdr(sexp)));
+            any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
+
+            return eval_get_fvs(body, eval_merge_fvs(any_sexp_cons(name, ANY_SEXP_NIL), pars));
+        }
+
         any_sexp_t car = eval_get_fvs(any_sexp_car(sexp), pars);
         any_sexp_t cdr = eval_get_fvs(any_sexp_cdr(sexp), pars);
 
@@ -142,6 +168,19 @@ any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
     return ANY_SEXP_IS_ERROR(fvs) || ANY_SEXP_IS_ERROR(copy)
          ? ANY_SEXP_ERROR
          : any_sexp_cons(copy, lambda);
+}
+
+any_sexp_t eval_let(any_sexp_t let, any_sexp_t env)
+{
+    any_sexp_t name = any_sexp_car(any_sexp_car(let));
+    any_sexp_t sexp = any_sexp_car(any_sexp_cdr(any_sexp_car(let)));
+    any_sexp_t body = any_sexp_car(any_sexp_cdr(let));
+
+    any_sexp_t value = eval(sexp, env);
+    if (!ANY_SEXP_IS_SYMBOL(name) || ANY_SEXP_IS_ERROR(value) || ANY_SEXP_IS_ERROR(body))
+        return ANY_SEXP_ERROR;
+
+    return eval(body, any_sexp_cons(any_sexp_cons(name, value), env));
 }
 
 any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any_sexp_t fvs)
@@ -442,7 +481,35 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             }
 
             log_trace("Lambda");
-            return any_sexp_cons(cons->car, eval_lambda(cons->cdr, env));
+            any_sexp_t lambda = eval_lambda(cons->cdr, env);
+
+            return ANY_SEXP_IS_ERROR(lambda)
+                 ? ANY_SEXP_ERROR
+                 : any_sexp_cons(cons->car, lambda);
+        }
+
+        // (let (name value) body)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "let")) {
+            if (!eval_is_let(sexp)) {
+                log_error("Malformed let");
+                return ANY_SEXP_ERROR;
+            }
+
+            log_trace("Let");
+            return eval_let(cons->cdr, env);
+        }
+
+        // (macro name (pars ...) body)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "macro")) {
+            log_error("TODO");
+            return ANY_SEXP_ERROR;
+        }
+
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "define")) {
+            log_error("Define can be used only at the top level");
+            return ANY_SEXP_ERROR;
         }
     }
 
@@ -552,6 +619,7 @@ void eval_init()
         "if", "lambda", "quote",
         "+", "*", "=",
         "print", "eval", "tag?",
+        "let", "macro", "define",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 
