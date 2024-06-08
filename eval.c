@@ -266,6 +266,23 @@ any_sexp_t eval_print(any_sexp_t sexp, any_sexp_t env)
     return eval_print(any_sexp_cdr(sexp), env);
 }
 
+any_sexp_t eval_list(any_sexp_t sexp, any_sexp_t env)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return ANY_SEXP_NIL;
+
+    if (!ANY_SEXP_IS_CONS(sexp)) {
+        log_error("Malformed list");
+        return ANY_SEXP_ERROR;
+    }
+
+    any_sexp_t value = eval(any_sexp_car(sexp), env);
+    if (ANY_SEXP_IS_ERROR(value))
+        return ANY_SEXP_ERROR;
+
+    return any_sexp_cons(value, eval_list(any_sexp_cdr(sexp), env));
+}
+
 any_sexp_t eval_if(any_sexp_t sexp, any_sexp_t env)
 {
     any_sexp_t car = any_sexp_car(sexp);
@@ -349,6 +366,13 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "print")) {
             log_trace("Print");
             return eval_print(cons->cdr, env);
+        }
+
+        // (list ...)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "list")) {
+            log_trace("List");
+            return eval_list(cons->cdr, env);
         }
 
         // (tag? x)
@@ -524,10 +548,10 @@ static any_sexp_t symbol_list(const char *symbols[], size_t n)
 void eval_init()
 {
     static const char *symbols[] = {
-        "car", "cdr", "tag?",
+        "car", "cdr", "list",
         "if", "lambda", "quote",
         "+", "*", "=",
-        "print", "eval"
+        "print", "eval", "tag?",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 

@@ -11,19 +11,21 @@
 
 
 ;; Lambda example
-(print
-  ((lambda (x y) x) "a" "b"))
+(define try
+  (lambda (x)
+    (print (list x "==>" (eval x)))))
 
-(print
-  (((lambda (x) (x x)) (lambda (x) x)) "it works!"))
+(try '((lambda (x y) x) "a" "b"))
+
+(try '(((lambda (x) (x x)) (lambda (x) x)) "it works!"))
 
 ;; Define example
 (define nil?
   (lambda (x)
     (= (tag? x) (tag? '()))))
 
-(print (nil? 1))
-(print (nil? '()))
+(print (list "False is" (nil? 1)))
+(print (list "True is" (nil? '())))
 
 ;; Y Combinator
 (define Y
@@ -39,7 +41,7 @@
            1
            (* n (f (+ n -1))))))))
 
-(print (fac 10))
+(print (list "Factorial" (fac 10)))
 
 (define len
   (Y (lambda (f)
@@ -48,4 +50,9 @@
            0
            (+ 1 (f (cdr l))))))))
 
-(print (len '(a b c d e)))
+(define trylen
+  (lambda (x)
+    (print (list "Length of" x (len x)))))
+
+(trylen '(a b c d e))
+(trylen '(1 2 3))

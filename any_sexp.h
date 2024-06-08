@@ -176,6 +176,8 @@ any_sexp_t any_sexp_cdr(any_sexp_t sexp);
 
 any_sexp_t any_sexp_reverse(any_sexp_t sexp);
 
+any_sexp_t any_sexp_append(any_sexp_t a, any_sexp_t b);
+
 any_sexp_t any_sexp_copy(any_sexp_t sexp);
 
 any_sexp_t any_sexp_copy_list(any_sexp_t sexp);
@@ -683,6 +685,20 @@ any_sexp_t any_sexp_reverse(any_sexp_t sexp)
     }
 
     return prev;
+}
+
+any_sexp_t any_sexp_append(any_sexp_t a, any_sexp_t b)
+{
+    if (ANY_SEXP_IS_NIL(a))
+        return b;
+
+    if (!ANY_SEXP_IS_CONS(a))
+        return ANY_SEXP_ERROR;
+
+    any_sexp_t tail = any_sexp_append(any_sexp_cdr(a), b);
+    return ANY_SEXP_IS_ERROR(tail)
+         ? ANY_SEXP_ERROR
+         : any_sexp_cons(any_sexp_car(a), tail);
 }
 
 any_sexp_t any_sexp_copy(any_sexp_t sexp)
