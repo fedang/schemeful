@@ -6,16 +6,13 @@
 #define ANY_LOG_IMPLEMENT
 #include "any_log.h"
 
-void print_env(any_sexp_t env)
-{
-    log_info("Environment:");
-    any_sexp_print(env);
-    printf("\n");
-}
+// TODO: Actually handle memory...
 
 void repl()
 {
     printf("My own little lisp :)\n");
+
+    eval_init();
     any_sexp_t env = ANY_SEXP_NIL;
 
     any_sexp_reader_t reader;
@@ -43,33 +40,50 @@ void repl()
         //any_sexp_free_list(sexp);
     }
 
-    print_env(env);
-    any_sexp_free_list(env);
+    log_info("Environment:");
+    any_sexp_print(env);
+    printf("\n");
+    //any_sexp_free_list(env);
+}
+
+void usage()
+{
+    printf("Usage: schemeful [--trace] [file]\n");
 }
 
 int main(int argc, char **argv)
 {
-    any_log_init(stdout, ANY_LOG_TRACE);
+    any_log_level_t level = ANY_LOG_INFO;
+    int argb = 1;
 
-    if (argc == 1) {
+    if (argc > 1 && !strcmp(argv[1], "--trace")) {
+        argb++;
+        level = ANY_LOG_TRACE;
+    }
+
+    any_log_init(stdout, level);
+
+    if ((argc - argb) == 0) {
         repl();
         return 0;
     }
 
-    if (argc == 2) {
-        FILE *file = fopen(argv[1], "rb");
+    if ((argc - argb) == 1) {
+        FILE *file = fopen(argv[argb], "rb");
         if (file == NULL) {
-            log_error("Failed to open file %s", argv[1]);
+            log_error("Failed to open file %s", argv[argb]);
             return 1;
         }
 
+        eval_init();
         any_sexp_t env = ANY_SEXP_NIL;
+
         eval_file(file, &env);
-        print_env(env);
-        any_sexp_free_list(env);
+        //any_sexp_free_list(env);
         return 0;
     }
 
-    log_error("Unexpected arguments");
+
+    usage();
     return 1;
 }

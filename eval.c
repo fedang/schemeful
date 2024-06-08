@@ -7,6 +7,7 @@
 #define ANY_SEXP_IMPLEMENT
 #include "any_sexp.h"
 
+static any_sexp_t primitives = ANY_SEXP_NIL;
 
 // Environment
 //
@@ -15,7 +16,7 @@
 any_sexp_t eval_symbol(const char *symbol, any_sexp_t env)
 {
     if (ANY_SEXP_IS_NIL(env)) {
-        log_error("Symbol %s not found", symbol);
+        log_error("Symbol %s not bound in scope", symbol);
         return ANY_SEXP_ERROR;
     }
 
@@ -26,10 +27,127 @@ any_sexp_t eval_symbol(const char *symbol, any_sexp_t env)
     return eval_symbol(symbol, any_sexp_cdr(env));
 }
 
-any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env)
+bool eval_is_symbol_list(any_sexp_t sexp)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return true;
+
+    if (!ANY_SEXP_IS_CONS(sexp))
+        return false;
+
+    return ANY_SEXP_IS_SYMBOL(any_sexp_car(sexp))
+        && eval_is_symbol_list(any_sexp_cdr(sexp));
+}
+
+bool eval_is_lambda(any_sexp_t sexp)
+{
+    any_sexp_t car = any_sexp_car(sexp);
+    any_sexp_t cadr = any_sexp_car(any_sexp_cdr(sexp));
+    any_sexp_t cddr = any_sexp_cdr(any_sexp_cdr(sexp));
+    any_sexp_t caddr = any_sexp_car(cddr);
+
+    return ANY_SEXP_IS_CONS(sexp)
+        && ANY_SEXP_IS_SYMBOL(car)
+        && !strcmp(ANY_SEXP_GET_SYMBOL(car), "lambda")
+        && ANY_SEXP_IS_CONS(cadr)
+        && ANY_SEXP_IS_CONS(cddr)
+        && ANY_SEXP_IS_NIL(any_sexp_cdr(cddr))
+        && eval_is_symbol_list(cadr);
+}
+
+bool eval_find_fvs(const char *symbol, any_sexp_t fvs)
+{
+    if (ANY_SEXP_IS_NIL(fvs))
+        return false;
+
+    any_sexp_t car = any_sexp_car(fvs);
+
+    if (!ANY_SEXP_IS_SYMBOL(car))
+        log_panic("Invalid fvs passed");
+
+    return !strcmp(symbol, ANY_SEXP_GET_SYMBOL(car))
+        || eval_find_fvs(symbol, any_sexp_cdr(fvs));
+}
+
+any_sexp_t eval_merge_fvs(any_sexp_t a, any_sexp_t b)
+{
+    if (ANY_SEXP_IS_NIL(a))
+        return b;
+
+    if (!ANY_SEXP_IS_CONS(a))
+        return ANY_SEXP_ERROR;
+
+    if (eval_find_fvs(ANY_SEXP_GET_SYMBOL(any_sexp_car(a)), b))
+        return eval_merge_fvs(any_sexp_cdr(a), b);
+
+    return any_sexp_cons(any_sexp_car(a), eval_merge_fvs(any_sexp_cdr(a), b));
+}
+
+any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
+{
+    if (ANY_SEXP_IS_SYMBOL(sexp)) {
+        const char *symbol = ANY_SEXP_GET_SYMBOL(sexp);
+        return eval_find_fvs(symbol, pars) || eval_find_fvs(symbol, primitives)
+             ? ANY_SEXP_NIL
+             : any_sexp_cons(sexp, ANY_SEXP_NIL);
+    }
+
+    if (ANY_SEXP_IS_CONS(sexp)) {
+
+        // Update parameters
+        //
+        if (eval_is_lambda(sexp)) {
+            any_sexp_t sub_pars = any_sexp_car(any_sexp_cdr(sexp));
+            any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
+
+            return eval_get_fvs(body, eval_merge_fvs(sub_pars, pars));
+        }
+
+        any_sexp_t car = eval_get_fvs(any_sexp_car(sexp), pars);
+        any_sexp_t cdr = eval_get_fvs(any_sexp_cdr(sexp), pars);
+
+        return ANY_SEXP_IS_ERROR(car) || ANY_SEXP_IS_ERROR(cdr)
+             ? ANY_SEXP_ERROR
+             : eval_merge_fvs(car, cdr);
+    }
+
+    return ANY_SEXP_NIL;
+}
+
+any_sexp_t eval_copy_fvs(any_sexp_t fvs, any_sexp_t env)
+{
+    if (ANY_SEXP_IS_NIL(fvs))
+        return ANY_SEXP_NIL;
+
+    if (!ANY_SEXP_IS_CONS(fvs) || !ANY_SEXP_IS_SYMBOL(any_sexp_car(fvs)))
+        return ANY_SEXP_ERROR;
+
+    any_sexp_t sexp = eval_symbol(ANY_SEXP_GET_SYMBOL(any_sexp_car(fvs)), env);
+    any_sexp_t rest = eval_copy_fvs(any_sexp_cdr(fvs), env);
+
+    if (ANY_SEXP_IS_ERROR(sexp) || ANY_SEXP_IS_ERROR(rest))
+        return ANY_SEXP_ERROR;
+
+    return any_sexp_cons(any_sexp_cons(any_sexp_car(fvs), any_sexp_copy_list(sexp)), rest);
+}
+
+any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
+{
+    any_sexp_t pars = any_sexp_car(lambda);
+    any_sexp_t body = any_sexp_car(any_sexp_cdr(lambda));
+
+    any_sexp_t fvs = eval_get_fvs(body, pars);
+    any_sexp_t copy = eval_copy_fvs(fvs, env);
+
+    return ANY_SEXP_IS_ERROR(fvs) || ANY_SEXP_IS_ERROR(copy)
+         ? ANY_SEXP_ERROR
+         : any_sexp_cons(copy, lambda);
+}
+
+any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any_sexp_t fvs)
 {
     if (ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))
-        return ANY_SEXP_NIL;
+        return fvs;
 
     if ((ANY_SEXP_IS_NIL(pars) && !ANY_SEXP_IS_NIL(args)) ||
         (!ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))) {
@@ -48,7 +166,7 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env)
     }
 
     any_sexp_t arg = eval(any_sexp_car(args), env);
-    any_sexp_t sub_env = eval_append_env(any_sexp_cdr(pars), any_sexp_cdr(args), env);
+    any_sexp_t sub_env = eval_append_env(any_sexp_cdr(pars), any_sexp_cdr(args), env, fvs);
 
     if (ANY_SEXP_IS_ERROR(sub_env) || ANY_SEXP_IS_ERROR(arg))
         return ANY_SEXP_ERROR;
@@ -173,10 +291,11 @@ any_sexp_t eval_if(any_sexp_t sexp, any_sexp_t env)
     return eval(caddr, env);
 }
 
-any_sexp_t eval_cons(any_sexp_cons_t *cons, any_sexp_t env)
+any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
 {
-    // Handle builtin functions
+    any_sexp_cons_t *cons = ANY_SEXP_GET_CONS(sexp);
 
+    // Handle builtin functions
     if (ANY_SEXP_IS_SYMBOL(cons->car)) {
 
         // (quote exp) <=> (cons 'quote (cons exp nil))
@@ -293,13 +412,13 @@ any_sexp_t eval_cons(any_sexp_cons_t *cons, any_sexp_t env)
         // (lambda (a b c ...) exp)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "lambda")) {
-            if (!ANY_SEXP_IS_CONS(cons->cdr) || !ANY_SEXP_IS_CONS(any_sexp_car(cons->cdr)) ||
-                !ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(cons->cdr)))) {
+            if (!eval_is_lambda(sexp)) {
                 log_error("Malformed lambda");
                 return ANY_SEXP_ERROR;
             }
 
-            return ANY_SEXP_TAG(cons, ANY_SEXP_TAG_CONS);
+            log_trace("Lambda");
+            return any_sexp_cons(cons->car, eval_lambda(cons->cdr, env));
         }
     }
 
@@ -310,11 +429,12 @@ any_sexp_t eval_cons(any_sexp_cons_t *cons, any_sexp_t env)
     if (ANY_SEXP_IS_CONS(callee) && ANY_SEXP_IS_SYMBOL(any_sexp_car(callee)) &&
         !strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(callee)), "lambda")) {
 
-        any_sexp_t pars = any_sexp_car(any_sexp_cdr(callee));
-        any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(callee)));
+        any_sexp_t fvs  = any_sexp_car(any_sexp_cdr(callee));
+        any_sexp_t pars = any_sexp_car(any_sexp_cdr(any_sexp_cdr(callee)));
+        any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(any_sexp_cdr(callee))));
 
         // Update the environment with the arguments
-        any_sexp_t body_env = eval_append_env(pars, cons->cdr, env);
+        any_sexp_t body_env = eval_append_env(pars, cons->cdr, env, fvs);
         if (ANY_SEXP_IS_ERROR(body_env))
             return ANY_SEXP_ERROR;
 
@@ -337,7 +457,7 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
             return ANY_SEXP_ERROR;
 
         case ANY_SEXP_TAG_CONS:
-            return eval_cons(ANY_SEXP_GET_CONS(sexp), env);
+            return eval_cons(sexp, env);
 
         case ANY_SEXP_TAG_SYMBOL:
             return eval_symbol(ANY_SEXP_GET_SYMBOL(sexp), env);
@@ -391,4 +511,26 @@ void eval_file(FILE *file, any_sexp_t *env)
         eval_define(sexp, env);
         //any_sexp_free_list(sexp);
     } while (!ANY_SEXP_IS_ERROR(sexp));
+}
+
+static any_sexp_t symbol_list(const char *symbols[], size_t n)
+{
+    return n == 0
+         ? ANY_SEXP_NIL
+         : any_sexp_cons(any_sexp_symbol(symbols[n - 1], strlen(symbols[n - 1])),
+                         symbol_list(symbols, n - 1));
+}
+
+void eval_init()
+{
+    static const char *symbols[] = {
+        "car", "cdr", "tag?",
+        "if", "lambda", "quote",
+        "+", "*", "=",
+        "print", "eval"
+    };
+    primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
+
+    log_value_trace("Initialized evaluator",
+                    "g:primitives", ANY_LOG_FORMATTER(any_sexp_fprint), primitives);
 }

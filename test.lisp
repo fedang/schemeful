@@ -30,14 +30,14 @@
   (lambda (f)
     ((lambda (g) (g g))
      (lambda (g)
-       (f (lambda x ((g g) x)))))))
+       (f (lambda (x) ((g g) x)))))))
 
 (define fac
   (Y (lambda (f)
        (lambda (n)
          (if (= n 0)
            1
-           (* n (f (+ x -1))))))))
+           (* n (f (+ n -1))))))))
 
 (print (fac 10))
 
@@ -48,4 +48,4 @@
            0
            (+ 1 (f (cdr l))))))))
 
-(print (len '(a b c)))
+(print (len '(a b c d e)))
