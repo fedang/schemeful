@@ -29,7 +29,7 @@
       '()
       (cons
         (f (car l))
-        (m (cdr l))))))
+        (m f (cdr l))))))
 
 (define length
   (lambdarec f (l)
@@ -41,7 +41,7 @@
   (lambdarec f (a b)
     (if (nil? a)
       b
-      (cons (car a) (f (cdr a))))))
+      (cons (car a) (f (cdr a) b)))))
 
 (define find
   (lambdarec f (l x)
@@ -49,5 +49,5 @@
       '()
       (if (and (= (tag? x) (tag? (car l))) (= x (car l)))
         1
-        (f (cdr l))))))
+        (f (cdr l) x)))))
 

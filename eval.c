@@ -222,7 +222,7 @@ any_sexp_t eval_begin(any_sexp_t list, any_sexp_t env)
     return eval_begin(any_sexp_cdr(list), env);
 }
 
-any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any_sexp_t fvs)
+any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t fvs)
 {
     if (!ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args)) {
         log_error("Too few arguments for parameters");
@@ -231,11 +231,6 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any
 
     if (ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))
         return fvs;
-
-    if (!ANY_SEXP_IS_CONS(pars) || !ANY_SEXP_IS_CONS(args)) {
-        log_error("Malformed call expression");
-        return ANY_SEXP_ERROR;
-    }
 
     if (!ANY_SEXP_IS_SYMBOL(any_sexp_car(pars))) {
         log_error("Lambda parameter should be a symbol");
@@ -248,20 +243,14 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any
             return ANY_SEXP_ERROR;
         }
 
-        any_sexp_t list = eval_list(args, env);
-        if (ANY_SEXP_IS_ERROR(list))
-            return ANY_SEXP_ERROR;
-
-        return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), list), fvs);
+        return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), args), fvs);
     }
 
-    any_sexp_t arg = eval(any_sexp_car(args), env);
-    any_sexp_t sub_env = eval_append_env(any_sexp_cdr(pars), any_sexp_cdr(args), env, fvs);
-
-    if (ANY_SEXP_IS_ERROR(sub_env) || ANY_SEXP_IS_ERROR(arg))
+    any_sexp_t env = eval_append_env(any_sexp_cdr(pars), any_sexp_cdr(args), fvs);
+    if (ANY_SEXP_IS_ERROR(env))
         return ANY_SEXP_ERROR;
 
-    return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), arg), sub_env);
+    return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), any_sexp_car(args)), env);
 }
 
 any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, any_sexp_t body, any_sexp_t env)
@@ -273,7 +262,7 @@ any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, an
                     "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body);
 
     // Update the environment with the arguments
-    any_sexp_t body_env = eval_append_env(pars, args, env, fvs);
+    any_sexp_t body_env = eval_append_env(pars, args, fvs);
     if (ANY_SEXP_IS_ERROR(body_env))
         return ANY_SEXP_ERROR;
 
@@ -678,10 +667,16 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         any_sexp_t fvs  = any_sexp_car(any_sexp_cdr(callee));
         any_sexp_t pars = any_sexp_car(any_sexp_cdr(any_sexp_cdr(callee)));
         any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(any_sexp_cdr(callee))));
-        return eval_lambda_call(fvs, pars, cons->cdr, body, env);
+        any_sexp_t args = eval_list(cons->cdr, env);
+
+        return ANY_SEXP_IS_ERROR(args)
+             ? ANY_SEXP_ERROR
+             : eval_lambda_call(fvs, pars, args, body, env);
     }
 
-    log_error("Expected a function as a callee");
+    if (!ANY_SEXP_IS_ERROR(callee))
+        log_error("Expected a function as a callee");
+
     return ANY_SEXP_ERROR;
 }
 
@@ -754,7 +749,7 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
                 any_sexp_t pars = any_sexp_car(any_sexp_cdr(macro));
                 any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(macro)));
 
-                return eval_macro(eval_lambda_call(fvs, pars, eval_quote_list(cdr), body, env), env, menv);
+                return eval_macro(eval_lambda_call(fvs, pars, cdr, body, env), env, menv);
             }
         }
 
