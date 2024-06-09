@@ -40,13 +40,9 @@ void repl()
         //any_sexp_free_list(sexp);
     }
 
-    log_info("Environment:");
-    any_sexp_print(env);
-    printf("\n");
-
-    log_info("Macros:");
-    any_sexp_print(menv);
-    printf("\n");
+    log_value_info("Eval state",
+                   "g:env", ANY_LOG_FORMATTER(any_sexp_fprint), env,
+                   "g:menv", ANY_LOG_FORMATTER(any_sexp_fprint), menv);
     //any_sexp_free_list(env);
 }
 
