@@ -198,7 +198,7 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any
 
     if ((ANY_SEXP_IS_NIL(pars) && !ANY_SEXP_IS_NIL(args)) ||
         (!ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))) {
-        log_error("Parameters and arguments mismatched");
+        log_error("Number of parameters and arguments mismatched");
         return ANY_SEXP_ERROR;
     }
 
@@ -223,16 +223,16 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any
 
 any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, any_sexp_t body, any_sexp_t env)
 {
-    // Update the environment with the arguments
-    any_sexp_t body_env = eval_append_env(pars, args, env, fvs);
-    if (ANY_SEXP_IS_ERROR(body_env))
-        return ANY_SEXP_ERROR;
-
     log_value_trace("Lambda call",
                     "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs,
                     "g:pars", ANY_LOG_FORMATTER(any_sexp_fprint), pars,
                     "g:args", ANY_LOG_FORMATTER(any_sexp_fprint), args,
                     "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body);
+
+    // Update the environment with the arguments
+    any_sexp_t body_env = eval_append_env(pars, args, env, fvs);
+    if (ANY_SEXP_IS_ERROR(body_env))
+        return ANY_SEXP_ERROR;
 
     // Eval lambda body with the new environment
     return eval(body, body_env);
@@ -604,12 +604,15 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
             // ((macro-body) (quote a) (quote b) ...)
             //
             if (!ANY_SEXP_IS_ERROR(macro)) {
+                log_value_trace("Applying macro",
+                                "g:macro", ANY_LOG_FORMATTER(any_sexp_fprint), macro,
+                                "g:menv",  ANY_LOG_FORMATTER(any_sexp_fprint), menv);
+
                 any_sexp_t fvs  = any_sexp_car(macro);
                 any_sexp_t pars = any_sexp_car(any_sexp_cdr(macro));
                 any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(macro)));
 
-                // TODO: Consider using eval_macro here as well
-                return eval_lambda_call(fvs, pars, eval_quote_list(cdr), body, env);
+                return eval_macro(eval_lambda_call(fvs, pars, eval_quote_list(cdr), body, env), env, menv);
             }
         }
 
@@ -659,13 +662,20 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
                 return ANY_SEXP_ERROR;
             }
 
+            log_trace("Defmacro (%s)", ANY_SEXP_GET_SYMBOL(cadr));
             any_sexp_t lambda = eval_lambda(eval_macro(any_sexp_cons(caddr, cdddr), *env, *menv), *env);
             if (ANY_SEXP_IS_ERROR(lambda))
                 return ANY_SEXP_ERROR;
 
-            log_trace("Defmacro (%s)", ANY_SEXP_GET_SYMBOL(cadr));
-            *menv = any_sexp_cons(any_sexp_cons(cadr, lambda), *env);
+            *menv = any_sexp_cons(any_sexp_cons(cadr, lambda), *menv);
             return ANY_SEXP_NIL;
+        }
+
+        // (include file)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), "include")) {
+            log_error("TODO");
+            return ANY_SEXP_ERROR;
         }
     }
 
@@ -700,7 +710,7 @@ void eval_init()
         "print", "eval", "tag?",
         "if", "lambda", "let",
         "car", "cdr", "list",
-        "+", "*", "=",
+        "+", "*", "=", "include",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 
