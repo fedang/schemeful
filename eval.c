@@ -358,6 +358,9 @@ any_sexp_t eval_equal(any_sexp_t sexp, any_sexp_t env)
              ? any_sexp_number(1)
              : ANY_SEXP_NIL;
 
+    if (ANY_SEXP_IS_NIL(a) || ANY_SEXP_IS_NIL(b))
+        return any_sexp_number(1);
+
     log_error("Incompatible arguments to =");
     return ANY_SEXP_ERROR;
 }
