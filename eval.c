@@ -790,8 +790,23 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
         // (include file)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), "include")) {
-            log_error("TODO");
-            return ANY_SEXP_ERROR;
+
+            if (!ANY_SEXP_IS_STRING(cadr) || !ANY_SEXP_IS_NIL(cddr)) {
+                log_error("Malformed include");
+                return ANY_SEXP_ERROR;
+            }
+
+            const char *path = ANY_SEXP_GET_STRING(cadr);
+            FILE *file = fopen(path, "rb");
+            if (file == NULL) {
+                log_error("Failed to open file %s", path);
+                return ANY_SEXP_ERROR;
+            }
+
+            log_trace("Include (%s)", path);
+            return ANY_SEXP_IS_ERROR(eval_file(file, env, menv))
+                 ? ANY_SEXP_ERROR
+                 : ANY_SEXP_NIL;
         }
 
         // (expand list)
@@ -810,7 +825,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
     return eval(eval_macro(sexp, *env, *menv), *env);
 }
 
-void eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
+any_sexp_t eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
 {
     any_sexp_reader_t reader;
     any_sexp_reader_file_init(&reader, file);
@@ -821,6 +836,8 @@ void eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
         eval_define(sexp, env, menv);
         //any_sexp_free_list(sexp);
     } while (!ANY_SEXP_IS_ERROR(sexp));
+
+    return sexp;
 }
 
 static any_sexp_t symbol_list(const char *symbols[], size_t n)

@@ -15,7 +15,7 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv);
 
 any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv);
 
-void eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv);
+any_sexp_t eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv);
 
 void eval_init();
 
