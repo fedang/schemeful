@@ -833,11 +833,19 @@ any_sexp_t eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
     any_sexp_t sexp;
     do {
         sexp = any_sexp_read(&reader);
+
+        if (ANY_SEXP_IS_ERROR(sexp)) {
+            if (any_sexp_reader_end(&reader))
+                return ANY_SEXP_NIL;
+
+            log_error("Failed to read s-expression");
+            break;
+        }
+
         eval_define(sexp, env, menv);
-        //any_sexp_free_list(sexp);
     } while (!ANY_SEXP_IS_ERROR(sexp));
 
-    return sexp;
+    return ANY_SEXP_ERROR;
 }
 
 static any_sexp_t symbol_list(const char *symbols[], size_t n)
