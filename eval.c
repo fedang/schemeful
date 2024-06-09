@@ -13,18 +13,26 @@ static any_sexp_t primitives = ANY_SEXP_NIL;
 //
 // ((symbol value) (symbol value) ...)
 
-any_sexp_t eval_symbol(const char *symbol, any_sexp_t env)
+any_sexp_t eval_find_symbol(const char *symbol, any_sexp_t env)
 {
-    if (ANY_SEXP_IS_NIL(env)) {
-        log_error("Symbol %s not bound in scope", symbol);
+    if (ANY_SEXP_IS_NIL(env))
         return ANY_SEXP_ERROR;
-    }
 
     any_sexp_t car = any_sexp_car(env);
     if (!strcmp(symbol, ANY_SEXP_GET_SYMBOL(any_sexp_car(car))))
         return any_sexp_cdr(car);
 
-    return eval_symbol(symbol, any_sexp_cdr(env));
+    return eval_find_symbol(symbol, any_sexp_cdr(env));
+}
+
+any_sexp_t eval_symbol(const char *symbol, any_sexp_t env)
+{
+    any_sexp_t value = eval_find_symbol(symbol, env);
+
+    if (ANY_SEXP_IS_ERROR(value))
+        log_error("Symbol %s not bound in scope", symbol);
+
+    return value;
 }
 
 bool eval_is_symbol_list(any_sexp_t sexp)
@@ -213,6 +221,23 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any
     return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), arg), sub_env);
 }
 
+any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, any_sexp_t body, any_sexp_t env)
+{
+    // Update the environment with the arguments
+    any_sexp_t body_env = eval_append_env(pars, args, env, fvs);
+    if (ANY_SEXP_IS_ERROR(body_env))
+        return ANY_SEXP_ERROR;
+
+    log_value_trace("Lambda call",
+                    "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs,
+                    "g:pars", ANY_LOG_FORMATTER(any_sexp_fprint), pars,
+                    "g:args", ANY_LOG_FORMATTER(any_sexp_fprint), args,
+                    "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body);
+
+    // Eval lambda body with the new environment
+    return eval(body, body_env);
+}
+
 any_sexp_t eval_add(any_sexp_t sexp, any_sexp_t env)
 {
     if (ANY_SEXP_IS_NIL(sexp))
@@ -224,8 +249,10 @@ any_sexp_t eval_add(any_sexp_t sexp, any_sexp_t env)
     }
 
     any_sexp_t number = eval(any_sexp_car(sexp), env);
-    if (ANY_SEXP_IS_ERROR(number) || !ANY_SEXP_IS_NUMBER(number))
+    if (ANY_SEXP_IS_ERROR(number) || !ANY_SEXP_IS_NUMBER(number)) {
+        log_error("Invalid number passed to +");
         return ANY_SEXP_ERROR;
+    }
 
     any_sexp_t rest = eval_add(any_sexp_cdr(sexp), env);
     if (ANY_SEXP_IS_ERROR(rest) || !ANY_SEXP_IS_NUMBER(number))
@@ -245,8 +272,10 @@ any_sexp_t eval_multiply(any_sexp_t sexp, any_sexp_t env)
     }
 
     any_sexp_t number = eval(any_sexp_car(sexp), env);
-    if (ANY_SEXP_IS_ERROR(number) || !ANY_SEXP_IS_NUMBER(number))
+    if (ANY_SEXP_IS_ERROR(number) || !ANY_SEXP_IS_NUMBER(number)) {
+        log_error("Invalid number passed to *");
         return ANY_SEXP_ERROR;
+    }
 
     any_sexp_t rest = eval_multiply(any_sexp_cdr(sexp), env);
     if (ANY_SEXP_IS_ERROR(rest) || !ANY_SEXP_IS_NUMBER(number))
@@ -500,10 +529,10 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return eval_let(cons->cdr, env);
         }
 
-        // (macro name (pars ...) body)
+        // (defmacro name (pars ...) body)
         //
-        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "macro")) {
-            log_error("TODO");
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "defmacro")) {
+            log_error("Defmacro can be used only at the top level");
             return ANY_SEXP_ERROR;
         }
 
@@ -523,14 +552,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         any_sexp_t fvs  = any_sexp_car(any_sexp_cdr(callee));
         any_sexp_t pars = any_sexp_car(any_sexp_cdr(any_sexp_cdr(callee)));
         any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(any_sexp_cdr(callee))));
-
-        // Update the environment with the arguments
-        any_sexp_t body_env = eval_append_env(pars, cons->cdr, env, fvs);
-        if (ANY_SEXP_IS_ERROR(body_env))
-            return ANY_SEXP_ERROR;
-
-        // Eval lambda body with the new environment
-        return eval(body, body_env);
+        return eval_lambda_call(fvs, pars, cons->cdr, body, env);
     }
 
     log_error("Expected a function as a callee");
@@ -561,37 +583,97 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
     }
 }
 
-any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env)
+any_sexp_t eval_quote_list(any_sexp_t sexp)
 {
-    // (define sym value)
-    //
-    if (ANY_SEXP_IS_CONS(sexp) && ANY_SEXP_IS_SYMBOL(any_sexp_car(sexp)) &&
-        !strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), "define")) {
+    if (ANY_SEXP_IS_NIL(sexp))
+        return ANY_SEXP_NIL;
 
+    return any_sexp_cons(any_sexp_quote(any_sexp_car(sexp)),
+                         eval_quote_list(any_sexp_cdr(sexp)));
+}
+
+any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
+{
+    if (ANY_SEXP_IS_CONS(sexp)) {
+        any_sexp_t car = any_sexp_car(sexp);
+        any_sexp_t cdr = any_sexp_cdr(sexp);
+
+        if (ANY_SEXP_IS_SYMBOL(car)) {
+            any_sexp_t macro = eval_find_symbol(ANY_SEXP_GET_SYMBOL(car), menv);
+
+            // Apply macro
+            // ((macro-body) (quote a) (quote b) ...)
+            //
+            if (!ANY_SEXP_IS_ERROR(macro)) {
+                any_sexp_t fvs  = any_sexp_car(macro);
+                any_sexp_t pars = any_sexp_car(any_sexp_cdr(macro));
+                any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(macro)));
+
+                // TODO: Consider using eval_macro here as well
+                return eval_lambda_call(fvs, pars, eval_quote_list(cdr), body, env);
+            }
+        }
+
+        return any_sexp_cons(eval_macro(car, env, menv), eval_macro(cdr, env, menv));
+    }
+
+    return sexp;
+}
+
+
+any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
+{
+    if (ANY_SEXP_IS_CONS(sexp) && ANY_SEXP_IS_SYMBOL(any_sexp_car(sexp))) {
         any_sexp_t cdr = any_sexp_cdr(sexp);
         any_sexp_t cadr = any_sexp_car(cdr);
         any_sexp_t cddr = any_sexp_cdr(cdr);
         any_sexp_t caddr = any_sexp_car(cddr);
+        any_sexp_t cdddr = any_sexp_cdr(cddr);
 
-        if (!ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_CONS(cddr) ||
-            !ANY_SEXP_IS_NIL(any_sexp_cdr(cddr)) || !ANY_SEXP_IS_SYMBOL(cadr)) {
-            log_error("Malformed define");
-            return ANY_SEXP_ERROR;
+        // (define name value)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), "define")) {
+
+            if (!ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_CONS(cddr) ||
+                !ANY_SEXP_IS_NIL(any_sexp_cdr(cddr)) || !ANY_SEXP_IS_SYMBOL(cadr)) {
+                log_error("Malformed define");
+                return ANY_SEXP_ERROR;
+            }
+
+            any_sexp_t value = eval(eval_macro(caddr, *env, *menv), *env);
+            if (ANY_SEXP_IS_ERROR(value))
+                return ANY_SEXP_ERROR;
+
+            log_trace("Define (%s)", ANY_SEXP_GET_SYMBOL(cadr));
+            *env = any_sexp_cons(any_sexp_cons(cadr, value), *env);
+            return ANY_SEXP_NIL;
         }
 
-        any_sexp_t value = eval(caddr, *env);
-        if (ANY_SEXP_IS_ERROR(value))
-            return ANY_SEXP_ERROR;
+        // (defmacro name (pars ...) body)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(sexp)), "defmacro")) {
 
-        log_trace("Define (%s)", ANY_SEXP_GET_SYMBOL(cadr));
-        *env = any_sexp_cons(any_sexp_cons(cadr, value), *env);
-        return ANY_SEXP_NIL;
+            if (!ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_CONS(cddr) ||
+                !ANY_SEXP_IS_CONS(cdddr) || !ANY_SEXP_IS_NIL(any_sexp_cdr(cdddr)) ||
+                !ANY_SEXP_IS_SYMBOL(cadr) || !eval_is_symbol_list(caddr)) {
+                log_error("Malformed defmacro");
+                return ANY_SEXP_ERROR;
+            }
+
+            any_sexp_t lambda = eval_lambda(eval_macro(any_sexp_cons(caddr, cdddr), *env, *menv), *env);
+            if (ANY_SEXP_IS_ERROR(lambda))
+                return ANY_SEXP_ERROR;
+
+            log_trace("Defmacro (%s)", ANY_SEXP_GET_SYMBOL(cadr));
+            *menv = any_sexp_cons(any_sexp_cons(cadr, lambda), *env);
+            return ANY_SEXP_NIL;
+        }
     }
 
-    return eval(sexp, *env);
+    return eval(eval_macro(sexp, *env, *menv), *env);
 }
 
-void eval_file(FILE *file, any_sexp_t *env)
+void eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
 {
     any_sexp_reader_t reader;
     any_sexp_reader_file_init(&reader, file);
@@ -599,7 +681,7 @@ void eval_file(FILE *file, any_sexp_t *env)
     any_sexp_t sexp;
     do {
         sexp = any_sexp_read(&reader);
-        eval_define(sexp, env);
+        eval_define(sexp, env, menv);
         //any_sexp_free_list(sexp);
     } while (!ANY_SEXP_IS_ERROR(sexp));
 }
@@ -615,11 +697,11 @@ static any_sexp_t symbol_list(const char *symbols[], size_t n)
 void eval_init()
 {
     static const char *symbols[] = {
-        "car", "cdr", "list",
-        "if", "lambda", "quote",
-        "+", "*", "=",
+        "quote", "defmacro", "define",
         "print", "eval", "tag?",
-        "let", "macro", "define",
+        "if", "lambda", "let",
+        "car", "cdr", "list",
+        "+", "*", "=",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 

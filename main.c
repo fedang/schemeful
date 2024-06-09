@@ -13,7 +13,7 @@ void repl()
     printf("My own little lisp :)\n");
 
     eval_init();
-    any_sexp_t env = ANY_SEXP_NIL;
+    any_sexp_t env = ANY_SEXP_NIL, menv = ANY_SEXP_NIL;
 
     any_sexp_reader_t reader;
     any_sexp_reader_string_t string;
@@ -36,12 +36,16 @@ void repl()
 
         any_sexp_print(sexp);
         printf("\n===>\n");
-        any_sexp_print(eval_define(sexp, &env));
+        any_sexp_print(eval_define(sexp, &env, &menv));
         //any_sexp_free_list(sexp);
     }
 
     log_info("Environment:");
     any_sexp_print(env);
+    printf("\n");
+
+    log_info("Macros:");
+    any_sexp_print(menv);
     printf("\n");
     //any_sexp_free_list(env);
 }
@@ -76,9 +80,9 @@ int main(int argc, char **argv)
         }
 
         eval_init();
-        any_sexp_t env = ANY_SEXP_NIL;
+        any_sexp_t env = ANY_SEXP_NIL, menv = ANY_SEXP_NIL;
 
-        eval_file(file, &env);
+        eval_file(file, &env, &menv);
         //any_sexp_free_list(env);
         return 0;
     }
