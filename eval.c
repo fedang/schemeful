@@ -613,6 +613,32 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return ANY_SEXP_ERROR;
         }
 
+        // (apply f l)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "apply")) {
+
+            if (!ANY_SEXP_IS_CONS(cons->cdr) || !ANY_SEXP_IS_CONS(any_sexp_cdr(cons->cdr)) ||
+                !ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(cons->cdr)))) {
+                log_error("Malformed apply");
+                return ANY_SEXP_ERROR;
+            }
+
+            log_trace("Apply");
+            any_sexp_t lambda = eval(any_sexp_car(cons->cdr), env);
+            any_sexp_t list   = eval(any_sexp_car(any_sexp_cdr(cons->cdr)), env);
+
+            if (!ANY_SEXP_IS_CONS(lambda) || !ANY_SEXP_IS_SYMBOL(any_sexp_car(lambda)) ||
+                strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(lambda)), "lambda") || !ANY_SEXP_IS_CONS(list)) {
+                log_error("Invalid arguments passed to apply");
+                return ANY_SEXP_ERROR;
+            }
+
+            any_sexp_t fvs  = any_sexp_car(any_sexp_cdr(lambda));
+            any_sexp_t pars = any_sexp_car(any_sexp_cdr(any_sexp_cdr(lambda)));
+            any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(any_sexp_cdr(lambda))));
+            return eval_lambda_call(fvs, pars, list, body, env);
+        }
+
         // (defmacro name (pars ...) body)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "defmacro")) {
@@ -863,9 +889,9 @@ void eval_init()
         "quote", "defmacro", "define",
         "print", "eval", "tag?",
         "if", "lambda", "let",
+        "error", "expand", "apply",
         "car", "cdr", "cons",
         "+", "*", "=",
-        "error", "expand",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 

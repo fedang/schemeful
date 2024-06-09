@@ -1,14 +1,16 @@
 ;; Recursion
+
 (define Y
   (lambda (f)
     ((lambda (g) (g g))
      (lambda (g)
-       (f (lambda (x) ((g g) x)))))))
+       (f (lambda (&rest) (apply (g g) &rest)))))))
 
 (defmacro lambdarec (rec args body)
   (list 'Y (list 'lambda (list rec) (list 'lambda args body))))
 
 ;; Tagging
+
 (define nil-tag (tag? '()))
 
 (define cons-tag (tag? (list '())))
@@ -35,6 +37,7 @@
     (list '= (list 'tag? x) 'number-tag))
 
 ;; Booleans
+
 (define nil '())
 
 (define t 1)

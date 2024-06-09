@@ -1,6 +1,7 @@
 (include "basic.lisp")
 
 ;; Lists
+
 (defmacro caar (l)
   (list 'car (list 'car l)))
 
@@ -23,14 +24,12 @@
   (list 'car (list 'cdddr l)))
 
 (define map
-  (lambda (f l)
-    ((lambdarec m (l)
-      (if (nil? l)
-        '()
-        (cons
-          (f (car l))
-          (m (cdr l)))))
-    l)))
+  (lambdarec m (f l)
+    (if (nil? l)
+      '()
+      (cons
+        (f (car l))
+        (m (cdr l))))))
 
 (define length
   (lambdarec f (l)
@@ -39,20 +38,16 @@
       (+ 1 (f (cdr l))))))
 
 (define append
-  (lambda (a b)
-    ((lambdarec f (a)
-      (if (nil? a)
-        b
-        (cons (car a) (f (cdr a)))))
-     a)))
+  (lambdarec f (a b)
+    (if (nil? a)
+      b
+      (cons (car a) (f (cdr a))))))
 
 (define find
-  (lambda (l x)
-    ((lambdarec f (l)
-      (if (nil? l)
-        '()
-        (if (and (= (tag? x) (tag? (car l))) (= x (car l)))
-          1
-          (f (cdr l)))))
-     l)))
+  (lambdarec f (l x)
+    (if (nil? l)
+      '()
+      (if (and (= (tag? x) (tag? (car l))) (= x (car l)))
+        1
+        (f (cdr l))))))
 
