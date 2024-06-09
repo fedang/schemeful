@@ -191,16 +191,29 @@ any_sexp_t eval_let(any_sexp_t let, any_sexp_t env)
     return eval(body, any_sexp_cons(any_sexp_cons(name, value), env));
 }
 
+any_sexp_t eval_begin(any_sexp_t list, any_sexp_t env)
+{
+    if (ANY_SEXP_IS_NIL(list))
+        return ANY_SEXP_NIL;
+
+    if (ANY_SEXP_IS_NIL(any_sexp_cdr(list)))
+        return eval(any_sexp_car(list), env);
+
+    if (ANY_SEXP_IS_ERROR(eval(any_sexp_car(list), env)))
+        return ANY_SEXP_ERROR;
+
+    return eval_begin(any_sexp_cdr(list), env);
+}
+
 any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any_sexp_t fvs)
 {
-    if (ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))
-        return fvs;
-
-    if ((ANY_SEXP_IS_NIL(pars) && !ANY_SEXP_IS_NIL(args)) ||
-        (!ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))) {
-        log_error("Number of parameters and arguments mismatched");
+    if (!ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args)) {
+        log_error("Too few arguments for parameters");
         return ANY_SEXP_ERROR;
     }
+
+    if (ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args))
+        return fvs;
 
     if (!ANY_SEXP_IS_CONS(pars) || !ANY_SEXP_IS_CONS(args)) {
         log_error("Malformed call expression");
@@ -210,6 +223,19 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t env, any
     if (!ANY_SEXP_IS_SYMBOL(any_sexp_car(pars))) {
         log_error("Lambda parameter should be a symbol");
         return ANY_SEXP_ERROR;
+    }
+
+    if (!strcmp(ANY_SEXP_GET_SYMBOL(any_sexp_car(pars)), "&rest")) {
+        if (!ANY_SEXP_IS_NIL(any_sexp_cdr(pars))) {
+            log_error("Rest parameter should be the last");
+            return ANY_SEXP_ERROR;
+        }
+
+        any_sexp_t list = eval_list(args, env);
+        if (ANY_SEXP_IS_ERROR(list))
+            return ANY_SEXP_ERROR;
+
+        return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), list), fvs);
     }
 
     any_sexp_t arg = eval(any_sexp_car(args), env);
@@ -517,6 +543,13 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
                  : any_sexp_cons(cons->car, lambda);
         }
 
+        // (begin a b c ...)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "begin")) {
+            log_trace("Begin");
+            return eval_begin(cons->cdr, env);
+        }
+
         // (let (name value) body)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "let")) {
@@ -536,8 +569,17 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return ANY_SEXP_ERROR;
         }
 
+        // (define name value)
+        //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "define")) {
             log_error("Define can be used only at the top level");
+            return ANY_SEXP_ERROR;
+        }
+
+        // (include file)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "include")) {
+            log_error("Include can be used only at the top level");
             return ANY_SEXP_ERROR;
         }
     }
@@ -710,7 +752,8 @@ void eval_init()
         "print", "eval", "tag?",
         "if", "lambda", "let",
         "car", "cdr", "list",
-        "+", "*", "=", "include",
+        "+", "*", "=",
+        "include", "begin",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 

@@ -7,6 +7,8 @@ any_sexp_t eval_symbol(const char *symbol, any_sexp_t env);
 
 any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env);
 
+any_sexp_t eval_list(any_sexp_t sexp, any_sexp_t env);
+
 any_sexp_t eval(any_sexp_t sexp, any_sexp_t env);
 
 any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv);
