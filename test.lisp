@@ -19,10 +19,9 @@
 
 (try '(((lambda (x) (x x)) (lambda (x) x)) "it works!"))
 
-;; Define example
-(define nil?
-  (lambda (x)
-    (= (tag? x) (tag? '()))))
+;; Defmacro example
+(defmacro nil? (x)
+    (list '= (list 'tag? x) (list 'tag? '())))
 
 (print (list "False is" (nil? 1)))
 (print (list "True is" (nil? '())))

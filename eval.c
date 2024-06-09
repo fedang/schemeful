@@ -566,8 +566,7 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
             return ANY_SEXP_ERROR;
 
         case ANY_SEXP_TAG_NIL:
-            log_error("Unexpected nil");
-            return ANY_SEXP_ERROR;
+            return ANY_SEXP_NIL;
 
         case ANY_SEXP_TAG_CONS:
             return eval_cons(sexp, env);
