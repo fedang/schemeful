@@ -420,7 +420,7 @@ any_sexp_t eval_if(any_sexp_t sexp, any_sexp_t env)
 
     if (!ANY_SEXP_IS_CONS(sexp) || !ANY_SEXP_IS_CONS(cdr) ||
         !ANY_SEXP_IS_CONS(cddr) || !ANY_SEXP_IS_NIL(any_sexp_cdr(cddr))) {
-        log_error("Malformed if");
+        log_value_error("Malformed if", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
         return ANY_SEXP_ERROR;
     }
 
@@ -445,7 +445,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "quote")) {
             if (!ANY_SEXP_IS_NIL(any_sexp_cdr(cons->cdr))) {
-                log_error("Malformed quote");
+                log_value_error("Malformed quote", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -457,7 +457,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "eval")) {
             if (!ANY_SEXP_IS_NIL(any_sexp_cdr(cons->cdr))) {
-                log_error("Malformed eval");
+                log_value_error("Malformed eval", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -505,7 +505,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "tag?")) {
             if (!ANY_SEXP_IS_NIL(any_sexp_cdr(cons->cdr))) {
-                log_error("Malformed tag");
+                log_value_error("Malformed tag?", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -517,7 +517,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "car")) {
             if (!ANY_SEXP_IS_NIL(any_sexp_cdr(cons->cdr))) {
-                log_error("Malformed car");
+                log_value_error("Malformed car", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -535,7 +535,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "cdr")) {
             if (!ANY_SEXP_IS_NIL(any_sexp_cdr(cons->cdr))) {
-                log_error("Malformed cdr");
+                log_value_error("Malformed cdr", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -553,7 +553,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "cons")) {
             if (!ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(cons->cdr)))) {
-                log_error("Malformed cons");
+                log_value_error("Malformed cons", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -580,7 +580,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "lambda")) {
             if (!eval_is_lambda(sexp)) {
-                log_error("Malformed lambda");
+                log_value_error("Malformed lambda", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -601,7 +601,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "let")) {
             if (!eval_is_let(sexp)) {
-                log_error("Malformed let");
+                log_value_error("Malformed let", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -627,7 +627,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
 
             if (!ANY_SEXP_IS_CONS(cons->cdr) || !ANY_SEXP_IS_CONS(any_sexp_cdr(cons->cdr)) ||
                 !ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(cons->cdr)))) {
-                log_error("Malformed apply");
+                log_value_error("Malformed apply", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -820,7 +820,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
 
             if (!ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_CONS(cddr) ||
                 !ANY_SEXP_IS_NIL(any_sexp_cdr(cddr)) || !ANY_SEXP_IS_SYMBOL(cadr)) {
-                log_error("Malformed define");
+                log_value_error("Malformed define", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -840,7 +840,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
             if (!ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_CONS(cddr) ||
                 !ANY_SEXP_IS_CONS(cdddr) || !ANY_SEXP_IS_NIL(any_sexp_cdr(cdddr)) ||
                 !ANY_SEXP_IS_SYMBOL(cadr) || !eval_is_symbol_list(caddr)) {
-                log_error("Malformed defmacro");
+                log_value_error("Malformed defmacro", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -858,7 +858,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
         if (!strcmp(ANY_SEXP_GET_SYMBOL(car), "include")) {
 
             if (!ANY_SEXP_IS_STRING(cadr) || !ANY_SEXP_IS_NIL(cddr)) {
-                log_error("Malformed include");
+                log_value_error("Malformed include", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 
@@ -879,7 +879,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(car), "expand")) {
             if (!ANY_SEXP_IS_NIL(cddr)) {
-                log_error("Malformed expand");
+                log_value_error("Malformed expand", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
                 return ANY_SEXP_ERROR;
             }
 

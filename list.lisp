@@ -17,6 +17,9 @@
 (defmacro cddar (l)
   (list 'cddr (list 'car l)))
 
+(defmacro cadar (l)
+  (list 'cadr (list 'car l)))
+
 (defmacro caddr (l)
   (list 'car (list 'cddr l)))
 

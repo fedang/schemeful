@@ -117,3 +117,15 @@
 (define x
   (lambdarec F (arg1 arg2)
     (F (error "aaa"))))
+
+;  (letrec
+;    ((even (lambda (n) (or (= n 0) (odd (+ n -1)))))
+;     (odd  (lambda (n) (and (not (= n 0)) (even (+ n -1))))))
+;      (begin
+;        (print (list "Even 10" (even 10)))
+;        (print (list "Even 11" (even 11)))
+;        (print (list "Even 2" (even 2)))
+;        (print (list "Odd 4" (odd 4)))
+;        (print (list "Odd 17" (odd 17)))
+;        (print (list "Odd 3" (odd 3)))))
+;
