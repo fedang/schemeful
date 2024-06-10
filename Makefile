@@ -1,4 +1,5 @@
-CFLAGS = -ggdb -DANY_SEXP_NO_BOXING -DANY_LOG_VALUE_GENERIC_TYPE=any_sexp_t -Wall
+CFLAGS = -ggdb -Wall
+#CFLAGS += -DANY_SEXP_NO_BOXING -DANY_LOG_VALUE_GENERIC_TYPE=any_sexp_t
 
 SRCS = $(wildcard *.c)
 OBJS = $(SRCS:.c=.o)

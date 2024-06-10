@@ -232,23 +232,6 @@ any_sexp_t eval_begin(any_sexp_t list, any_sexp_t env)
     return eval_begin(any_sexp_cdr(list), env);
 }
 
-void eval_change_env(any_sexp_t symbol, any_sexp_t value, any_sexp_t env, any_sexp_t *envptr)
-{
-    if (ANY_SEXP_IS_NIL(env)) {
-        *envptr = any_sexp_cons(any_sexp_cons(symbol, value), *envptr);
-        return;
-    }
-
-    if (!ANY_SEXP_IS_CONS(env) || !ANY_SEXP_IS_CONS(any_sexp_car(env)))
-        log_panic("Invalid environment");
-
-    any_sexp_cons_t *cons = ANY_SEXP_GET_CONS(any_sexp_car(env));
-    if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), ANY_SEXP_GET_SYMBOL(symbol)))
-        cons->cdr = value;
-    else
-        eval_change_env(symbol, value, any_sexp_cdr(env), envptr);
-}
-
 any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t fvs)
 {
     if (!ANY_SEXP_IS_NIL(pars) && ANY_SEXP_IS_NIL(args)) {
@@ -735,7 +718,7 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
             return sexp;
     }
 
-    log_panic("Invalid tag (%d)", ANY_SEXP_GET_TAG(sexp));
+    log_panic("Invalid tag (%lx)", ANY_SEXP_GET_TAG(sexp));
 }
 
 any_sexp_t eval_quote_list(any_sexp_t sexp)
@@ -779,9 +762,9 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
             //
             if (!ANY_SEXP_IS_ERROR(macro)) {
                 log_value_trace("Applying macro",
-                                "s:name", ANY_SEXP_GET_SYMBOL(car),
-                                "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), macro,
-                                "g:menv", ANY_LOG_FORMATTER(any_sexp_fprint), menv);
+                                "s:name",  ANY_SEXP_GET_SYMBOL(car),
+                                "g:macro", ANY_LOG_FORMATTER(any_sexp_fprint), macro,
+                                "g:menv",  ANY_LOG_FORMATTER(any_sexp_fprint), menv);
 
                 any_sexp_t fvs  = any_sexp_car(macro);
                 any_sexp_t pars = any_sexp_car(any_sexp_cdr(macro));
@@ -797,6 +780,22 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
     return sexp;
 }
 
+void eval_change_env(any_sexp_t symbol, any_sexp_t value, any_sexp_t env, any_sexp_t *envptr)
+{
+    if (ANY_SEXP_IS_NIL(env)) {
+        *envptr = any_sexp_cons(any_sexp_cons(symbol, value), *envptr);
+        return;
+    }
+
+    if (!ANY_SEXP_IS_CONS(env) || !ANY_SEXP_IS_CONS(any_sexp_car(env)))
+        log_panic("Invalid environment");
+
+    any_sexp_cons_t *cons = ANY_SEXP_GET_CONS(any_sexp_car(env));
+    if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), ANY_SEXP_GET_SYMBOL(symbol)))
+        cons->cdr = value;
+    else
+        eval_change_env(symbol, value, any_sexp_cdr(env), envptr);
+}
 
 any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
 {

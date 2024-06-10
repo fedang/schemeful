@@ -716,7 +716,7 @@ any_sexp_t any_sexp_copy(any_sexp_t sexp)
 
         case ANY_SEXP_TAG_STRING: {
             char *string = ANY_SEXP_GET_STRING(sexp);
-            return any_sexp_symbol(string, strlen(string));
+            return any_sexp_string(string, strlen(string));
         }
 
         default:

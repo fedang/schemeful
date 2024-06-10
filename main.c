@@ -36,8 +36,10 @@ void repl()
 
         any_sexp_print(sexp);
         printf("\n===>\n");
-        any_sexp_print(eval_define(sexp, &env, &menv));
-        //any_sexp_free_list(sexp);
+        any_sexp_t value = eval_define(sexp, &env, &menv);
+        any_sexp_print(value);
+
+        eval_change_env(any_sexp_symbol("?", 1), value, env, &env);
     }
 
     log_value_info("Eval state",
