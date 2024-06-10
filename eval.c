@@ -56,7 +56,6 @@ bool eval_is_lambda(any_sexp_t sexp)
     any_sexp_t car = any_sexp_car(sexp);
     any_sexp_t cadr = any_sexp_car(any_sexp_cdr(sexp));
     any_sexp_t cddr = any_sexp_cdr(any_sexp_cdr(sexp));
-    any_sexp_t caddr = any_sexp_car(cddr);
 
     return ANY_SEXP_IS_CONS(sexp)
         && ANY_SEXP_IS_SYMBOL(car)
@@ -74,7 +73,6 @@ bool eval_is_let(any_sexp_t sexp)
     any_sexp_t car = any_sexp_car(sexp);
     any_sexp_t cadr = any_sexp_car(any_sexp_cdr(sexp));
     any_sexp_t cddr = any_sexp_cdr(any_sexp_cdr(sexp));
-    any_sexp_t caddr = any_sexp_car(cddr);
 
     return ANY_SEXP_IS_CONS(sexp)
         && ANY_SEXP_IS_SYMBOL(car)
@@ -197,6 +195,11 @@ any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
     any_sexp_t fvs = eval_get_fvs(body, pars);
     any_sexp_t copy = eval_copy_fvs(fvs, env);
 
+    log_value_trace("Lambda creation",
+                    "g:pars", ANY_LOG_FORMATTER(any_sexp_fprint), pars,
+                    "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body,
+                    "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs);
+
     return ANY_SEXP_IS_ERROR(fvs) || ANY_SEXP_IS_ERROR(copy)
          ? ANY_SEXP_ERROR
          : any_sexp_cons(copy, lambda);
@@ -282,7 +285,7 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t fvs)
     return any_sexp_cons(any_sexp_cons(any_sexp_car(pars), any_sexp_car(args)), env);
 }
 
-any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, any_sexp_t body, any_sexp_t env)
+any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, any_sexp_t body)
 {
     log_value_trace("Lambda call",
                     "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs,
@@ -595,12 +598,10 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
                 return ANY_SEXP_ERROR;
             }
 
-            log_trace("Lambda");
-            any_sexp_t lambda = eval_lambda(cons->cdr, env);
-
-            return ANY_SEXP_IS_ERROR(lambda)
+            any_sexp_t value = eval_lambda(cons->cdr, env);
+            return ANY_SEXP_IS_ERROR(value)
                  ? ANY_SEXP_ERROR
-                 : any_sexp_cons(cons->car, lambda);
+                 : any_sexp_cons(cons->car, value);
         }
 
         // (begin a b c ...)
@@ -657,7 +658,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             any_sexp_t fvs  = any_sexp_car(any_sexp_cdr(lambda));
             any_sexp_t pars = any_sexp_car(any_sexp_cdr(any_sexp_cdr(lambda)));
             any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(any_sexp_cdr(lambda))));
-            return eval_lambda_call(fvs, pars, list, body, env);
+            return eval_lambda_call(fvs, pars, list, body);
         }
 
         // (defmacro name (pars ...) body)
@@ -703,7 +704,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
 
         return ANY_SEXP_IS_ERROR(args)
              ? ANY_SEXP_ERROR
-             : eval_lambda_call(fvs, pars, args, body, env);
+             : eval_lambda_call(fvs, pars, args, body);
     }
 
     if (!ANY_SEXP_IS_ERROR(callee))
@@ -733,6 +734,8 @@ any_sexp_t eval(any_sexp_t sexp, any_sexp_t env)
         case ANY_SEXP_TAG_NUMBER:
             return sexp;
     }
+
+    log_panic("Invalid tag (%d)", ANY_SEXP_GET_TAG(sexp));
 }
 
 any_sexp_t eval_quote_list(any_sexp_t sexp)
@@ -776,14 +779,15 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
             //
             if (!ANY_SEXP_IS_ERROR(macro)) {
                 log_value_trace("Applying macro",
-                                "g:macro", ANY_LOG_FORMATTER(any_sexp_fprint), macro,
-                                "g:menv",  ANY_LOG_FORMATTER(any_sexp_fprint), menv);
+                                "s:name", ANY_SEXP_GET_SYMBOL(car),
+                                "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), macro,
+                                "g:menv", ANY_LOG_FORMATTER(any_sexp_fprint), menv);
 
                 any_sexp_t fvs  = any_sexp_car(macro);
                 any_sexp_t pars = any_sexp_car(any_sexp_cdr(macro));
                 any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(macro)));
 
-                return eval_macro(eval_lambda_call(fvs, pars, cdr, body, env), env, menv);
+                return eval_macro(eval_lambda_call(fvs, pars, cdr, body), env, menv);
             }
         }
 
@@ -874,7 +878,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
             }
 
             log_trace("Expand");
-            return eval_macro(cadr, env, *menv);
+            return eval_macro(cadr, *env, *menv);
         }
     }
 

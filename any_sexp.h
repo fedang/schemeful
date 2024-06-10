@@ -49,8 +49,8 @@ typedef struct any_sexp {
     };
 } any_sexp_t;
 
-#define ANY_SEXP_ERROR (any_sexp_error())
-#define ANY_SEXP_NIL   (any_sexp_nil())
+#define ANY_SEXP_ERROR ((any_sexp_t) { .tag = ANY_SEXP_TAG_ERROR })
+#define ANY_SEXP_NIL   ((any_sexp_t) { .tag = ANY_SEXP_TAG_NIL })
 
 #define ANY_SEXP_GET_TAG(sexp)    ((sexp).tag)
 #define ANY_SEXP_GET_CONS(sexp)   ((sexp).cons)
@@ -326,7 +326,7 @@ any_sexp_t any_sexp_read(any_sexp_reader_t *reader)
 
         do {
             if (length < ANY_SEXP_READER_BUFFER_LENGTH) {
-                number = number && (length == 0 && reader->c == '-' || isdigit(reader->c));
+                number = number && ((length == 0 && reader->c == '-') || isdigit(reader->c));
                 buffer[length++] = reader->c;
             }
 
@@ -522,6 +522,8 @@ int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp)
             return sign + any_sexp_writer_putnum(writer, value);
         }
     }
+
+    return 0;
 }
 
 int any_sexp_fprint(FILE *file, any_sexp_t sexp)
@@ -704,11 +706,6 @@ any_sexp_t any_sexp_append(any_sexp_t a, any_sexp_t b)
 any_sexp_t any_sexp_copy(any_sexp_t sexp)
 {
     switch (ANY_SEXP_GET_TAG(sexp)) {
-        case ANY_SEXP_TAG_ERROR:
-        case ANY_SEXP_TAG_NIL:
-        case ANY_SEXP_TAG_NUMBER:
-            return sexp;
-
         case ANY_SEXP_TAG_CONS:
             return any_sexp_cons(any_sexp_car(sexp), any_sexp_cdr(sexp));
 
@@ -721,6 +718,9 @@ any_sexp_t any_sexp_copy(any_sexp_t sexp)
             char *string = ANY_SEXP_GET_STRING(sexp);
             return any_sexp_symbol(string, strlen(string));
         }
+
+        default:
+            return sexp;
     }
 }
 

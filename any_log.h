@@ -142,15 +142,15 @@ typedef enum {
 //       f        | double                       | "%lf"
 //       s        | char * (0-terminated)        | "%s"
 //
-//       g        | any_log_formatter_t (function), void *
+//       g        | any_log_formatter_t (function) + ANY_LOG_VALUE_GENERIC_TYPE
 //
 // If no type specifier is given the function will assume the type given
 // by ANY_LOG_VALUE_DEFAULT_TYPE (by default string).
 //
 // The 'g' specifier is handled differently than the others. It needs two parameters,
 // the first must be a custom formatter function (of type any_log_formatter_t) to
-// format the second value of type void *.
-// By defining ANY_LOG_NO_CUSTOM you can disable this custom type specifier.
+// format the second value of type ANY_LOG_VALUE_GENERIC_TYPE (by default void *).
+// By defining ANY_LOG_NO_GENERIC you can disable this custom type specifier.
 //
 // Example usage of value logging
 //
@@ -180,7 +180,7 @@ typedef enum {
 //    #define ANY_LOG_VALUE_DOUBLE(key, value) "\"%s\": %lf", key, value
 //    #define ANY_LOG_VALUE_STRING(key, value) "\"%s \": \"%s\"", key, value
 //    #define ANY_LOG_VALUE_AFTER(level, module, func, message) "}\n"
-//    #define ANY_LOG_NO_CUSTOM
+//    #define ANY_LOG_NO_GENERIC
 //    #include "any_log.h"
 //
 // As with log_trace and log_debug, log_value_trace and log_value_debug can be
@@ -203,11 +203,15 @@ typedef enum {
 #define log_value_trace(...) any_log_value(ANY_LOG_TRACE, ANY_LOG_MODULE, ANY_LOG_FUNC, __VA_ARGS__, (char *)NULL)
 #endif
 
-#ifndef ANY_LOG_NO_CUSTOM
+#ifndef ANY_LOG_NO_GENERIC
+
+#ifndef ANY_LOG_VALUE_GENERIC_TYPE
+#define ANY_LOG_VALUE_GENERIC_TYPE void *
+#endif
 
 // The type of the format functions for custom types
 //
-typedef void (*any_log_formatter_t)(FILE *stream, void *value);
+typedef void (*any_log_formatter_t)(FILE *stream, ANY_LOG_VALUE_GENERIC_TYPE value);
 
 #define ANY_LOG_FORMATTER(f) ((any_log_formatter_t)(f))
 
@@ -523,11 +527,11 @@ void any_log_format(any_log_level_t level, const char *module,
 #define ANY_LOG_VALUE_STRING(key, value) "%s=\"%s\"", key, value
 #endif
 
-#ifndef ANY_LOG_NO_CUSTOM
+#ifndef ANY_LOG_NO_GENERIC
 
 // Format custom types with the given formatter function
-#ifndef ANY_LOG_VALUE_CUSTOM
-#define ANY_LOG_VALUE_CUSTOM(key, stream, formatter, value) \
+#ifndef ANY_LOG_VALUE_GENERIC
+#define ANY_LOG_VALUE_GENERIC(key, stream, formatter, value) \
     do { \
         fprintf(stream, "%s=", key); \
         formatter(stream, value); \
@@ -581,7 +585,7 @@ void any_log_value(any_log_level_t level, const char *module,
                 case 'x':
                 case 'u': {
                     unsigned int value = va_arg(args, unsigned int);
-                    fprintf(any_log_stream, ANY_LOG_VALUE_HEX(key, va_arg(args, unsigned int)));
+                    fprintf(any_log_stream, ANY_LOG_VALUE_HEX(key, value));
                     break;
                 }
 
@@ -609,11 +613,11 @@ void any_log_value(any_log_level_t level, const char *module,
                     break;
                 }
 
-#ifndef ANY_LOG_NO_CUSTOM
+#ifndef ANY_LOG_NO_GENERIC
                 case 'g': {
                     any_log_formatter_t formatter = va_arg(args, any_log_formatter_t);
-                    void *value = va_arg(args, void *);
-                    ANY_LOG_VALUE_CUSTOM(key, any_log_stream, formatter, value);
+                    ANY_LOG_VALUE_GENERIC_TYPE value = va_arg(args, ANY_LOG_VALUE_GENERIC_TYPE);
+                    ANY_LOG_VALUE_GENERIC(key, any_log_stream, formatter, value);
                     break;
                 }
 #endif
