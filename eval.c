@@ -150,10 +150,13 @@ any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
         }
 
         if (eval_is_let(sexp)) {
-            any_sexp_t name = any_sexp_car(any_sexp_car(any_sexp_cdr(sexp)));
-            any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
+            any_sexp_t name  = any_sexp_car(any_sexp_car(any_sexp_cdr(sexp)));
+            any_sexp_t value = any_sexp_car(any_sexp_cdr(any_sexp_car(any_sexp_cdr(sexp))));
+            any_sexp_t body  = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
 
-            return eval_get_fvs(body, eval_merge_fvs(any_sexp_cons(name, ANY_SEXP_NIL), pars));
+
+            return eval_merge_fvs(eval_get_fvs(value, pars),
+                                  eval_get_fvs(body, eval_merge_fvs(any_sexp_cons(name, ANY_SEXP_NIL), pars)));
         }
 
         if (eval_is_quote(sexp))
@@ -755,6 +758,10 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
         any_sexp_t cdr = any_sexp_cdr(sexp);
 
         if (ANY_SEXP_IS_SYMBOL(car)) {
+
+            if (!strcmp(ANY_SEXP_GET_SYMBOL(car), "quote"))
+                return sexp;
+
             any_sexp_t macro = eval_find_symbol(ANY_SEXP_GET_SYMBOL(car), menv);
 
             // Apply macro
@@ -817,11 +824,11 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
                 return ANY_SEXP_ERROR;
             }
 
+            log_trace("Define (%s)", ANY_SEXP_GET_SYMBOL(cadr));
             any_sexp_t value = eval(eval_macro(caddr, *env, *menv), *env);
             if (ANY_SEXP_IS_ERROR(value))
                 return ANY_SEXP_ERROR;
 
-            log_trace("Define (%s)", ANY_SEXP_GET_SYMBOL(cadr));
             eval_change_env(cadr, value, *env, env);
             return ANY_SEXP_NIL;
         }
@@ -877,7 +884,11 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
             }
 
             log_trace("Expand");
-            return eval_macro(cadr, *env, *menv);
+            any_sexp_t value = eval(eval_macro(cadr, *env, *menv), *env);
+
+            return ANY_SEXP_IS_ERROR(value)
+                 ? ANY_SEXP_ERROR
+                 : eval_macro(value, *env, *menv);
         }
     }
 

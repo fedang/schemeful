@@ -14,6 +14,9 @@
 (defmacro cdar (l)
   (list 'cdr (list 'car l)))
 
+(defmacro cddar (l)
+  (list 'cddr (list 'car l)))
+
 (defmacro caddr (l)
   (list 'car (list 'cddr l)))
 
@@ -51,3 +54,10 @@
         1
         (f (cdr l) x)))))
 
+(define get
+  (lambdarec f (l n)
+    (if (nil? l)
+      '()
+      (if (= n 0)
+        (car l)
+        (f (cdr l) (+ n -1))))))

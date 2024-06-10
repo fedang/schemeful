@@ -98,3 +98,22 @@
         (print (list "Odd 4" (od 4)))
         (print (list "Odd 17" (od 17)))
         (print (list "Odd 3" (od 3)))))))
+
+
+(defmacro s (x y)
+  (list 'lambda (list x) (list 'lambda (list y) (list '+ x y))))
+
+(print (s i j))
+
+(define Y
+  (lambda (f)
+    ((lambda (g) (g g))
+     (lambda (g)
+       (f (lambda (&rest) (apply (g g) &rest)))))))
+
+(defmacro lambdarec (rec args body)
+  (list 'Y (list 'lambda (list rec) (list 'lambda args body))))
+
+(define x
+  (lambdarec F (arg1 arg2)
+    (F (error "aaa"))))
