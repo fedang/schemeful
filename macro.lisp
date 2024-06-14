@@ -1,5 +1,26 @@
 (include "list.lisp")
 
+;; Let*
+;; Linear let evaluation
+
+; (let* ((a 1) (b (+ a 1)) ...) body)
+;
+; ==>
+;
+; (let ((a 1))
+;   (let ((b (+ a 1)))
+;     ...
+;       body))
+
+(defmacro let* (vs body)
+  ((lambdarec f (vs)
+     (if (nil? vs)
+       body
+       (list 'let
+             (list (car vs))
+             (f (cdr vs)))))
+   vs))
+
 ;; Multivariate Y combinator
 (define Y*
   (lambda (&rest)
@@ -16,17 +37,15 @@
 ; (let tmp (Y*
 ;            (lambda (a b ...) av)
 ;            (lambda (a b ...) bv))
-;   (let (a (car tmp))
-;     (let (b (cadr tmp))
-;        ...
-;        body)))
+;   (let ((a (car tmp)) (b (cadr tmp)) ...)
+;        body)
 
 (define letrec-bindings
   (lambdarec f (vs)
     (if (nil? vs)
       (cons '() '())
       (if (and (symbol? (caar vs)) (nil? (cddar vs)))
-        (let (bs (f (cdr vs)))
+        (let ((bs (f (cdr vs))))
           (cons (cons (caar vs) (car bs)) (cons (cadar vs) (cdr bs))))
         (error "Invalid letrec bindings")))))
 

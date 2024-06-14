@@ -33,6 +33,10 @@ any_sexp_t eval_symbol(const char *symbol, any_sexp_t env)
 {
     any_sexp_t value = eval_find_symbol(symbol, env);
 
+    log_value_trace("Symbol lookup",
+                    "s:symbol", symbol,
+                    "g:env", ANY_LOG_FORMATTER(any_sexp_fprint), env);
+
     if (ANY_SEXP_IS_ERROR(value))
         log_error("Symbol %s not bound in scope", symbol);
 
@@ -123,22 +127,6 @@ bool eval_find_fvs(const char *symbol, any_sexp_t fvs)
         || eval_find_fvs(symbol, any_sexp_cdr(fvs));
 }
 
-any_sexp_t eval_get_let_binds(any_sexp_t sexp)
-{
-    if (ANY_SEXP_IS_NIL(sexp))
-        return ANY_SEXP_NIL;
-
-    if (!ANY_SEXP_IS_CONS(sexp))
-        return ANY_SEXP_ERROR;
-
-    any_sexp_t bind = any_sexp_car(any_sexp_car(sexp));
-    any_sexp_t rest = eval_get_let_binds(any_sexp_cdr(sexp));
-
-    return ANY_SEXP_IS_ERROR(rest) || ANY_SEXP_IS_ERROR(bind)
-         ? ANY_SEXP_ERROR
-         : any_sexp_cons(bind, rest);
-}
-
 any_sexp_t eval_merge_fvs(any_sexp_t a, any_sexp_t b)
 {
     if (ANY_SEXP_IS_NIL(a))
@@ -159,17 +147,19 @@ any_sexp_t eval_merge_fvs(any_sexp_t a, any_sexp_t b)
 any_sexp_t eval_get_let_fvs(any_sexp_t sexp, any_sexp_t pars)
 {
     if (ANY_SEXP_IS_NIL(sexp))
-        return ANY_SEXP_NIL;
+        return any_sexp_cons(ANY_SEXP_NIL, ANY_SEXP_NIL);
 
     if (!ANY_SEXP_IS_CONS(sexp))
-        return ANY_SEXP_ERROR;
+        log_panic("Invalid let");
 
-    any_sexp_t fvs  = eval_get_fvs(any_sexp_car(sexp), pars);
+    any_sexp_t fvs  = eval_get_fvs(any_sexp_car(any_sexp_cdr(any_sexp_car(sexp))), pars);
+    any_sexp_t name = any_sexp_car(any_sexp_car(sexp));
     any_sexp_t rest = eval_get_let_fvs(any_sexp_cdr(sexp), pars);
 
     return ANY_SEXP_IS_ERROR(rest) || ANY_SEXP_IS_ERROR(fvs)
          ? ANY_SEXP_ERROR
-         : eval_merge_fvs(fvs, rest);
+         : any_sexp_cons(eval_merge_fvs(fvs, any_sexp_car(rest)),
+                         any_sexp_cons(name, any_sexp_cdr(rest)));
 }
 
 any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
@@ -193,11 +183,11 @@ any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
         }
 
         if (eval_is_let(sexp)) {
-            any_sexp_t binds = eval_get_let_binds(any_sexp_car(any_sexp_cdr(sexp)));
-            any_sexp_t body  = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
-            any_sexp_t fvs   = eval_get_let_fvs(any_sexp_car(any_sexp_cdr(sexp)), pars);
+            any_sexp_t body = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
+            any_sexp_t fvs  = eval_get_let_fvs(any_sexp_car(any_sexp_cdr(sexp)), pars);
 
-            return eval_merge_fvs(fvs, eval_get_fvs(body, eval_merge_fvs(binds, pars)));
+            return eval_merge_fvs(any_sexp_car(fvs),
+                                  eval_get_fvs(body, eval_merge_fvs(any_sexp_cdr(fvs), pars)));
         }
 
         if (eval_is_quote(sexp))
@@ -228,7 +218,7 @@ any_sexp_t eval_copy_fvs(any_sexp_t fvs, any_sexp_t env)
     if (ANY_SEXP_IS_ERROR(sexp) || ANY_SEXP_IS_ERROR(rest))
         return ANY_SEXP_ERROR;
 
-    return any_sexp_cons(any_sexp_cons(any_sexp_car(fvs), any_sexp_copy_list(sexp)), rest);
+    return any_sexp_cons(any_sexp_cons(any_sexp_car(fvs), sexp), rest);
 }
 
 any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
@@ -277,6 +267,11 @@ any_sexp_t eval_let(any_sexp_t let, any_sexp_t env)
     }
 
     any_sexp_t body_env = eval_let_binds(binds, env);
+
+    log_value_trace("Let bindings",
+                    "g:sexp", let,
+                    "g:binds", binds,
+                    "g:env", body_env);
 
     return ANY_SEXP_IS_ERROR(body_env)
          ? ANY_SEXP_ERROR
@@ -515,6 +510,25 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return any_sexp_car(cons->cdr);
         }
 
+        // (gensym)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "gensym")) {
+            if (!ANY_SEXP_IS_NIL(cons->cdr)) {
+                log_value_error("Malformed gensym", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
+                return ANY_SEXP_ERROR;
+            }
+
+            // NOTE: This is not particularly solid. Ideally symbols should be interned
+            //       and gensym'd symbols should not, so they are unique.
+            //
+            static unsigned int gensym_id = 0;
+            char buffer[30];
+            int length = snprintf(buffer, sizeof(buffer), "gensym(%u)", gensym_id++);
+
+            log_trace("Gensym");
+            return any_sexp_symbol(buffer, length);
+        }
+
         // (eval exp)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "eval")) {
@@ -659,7 +673,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return eval_begin(cons->cdr, env);
         }
 
-        // (let (name value) body)
+        // (let ((name value) ...) body)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "let")) {
             if (!eval_is_let(sexp)) {
@@ -997,7 +1011,7 @@ void eval_init()
         "if", "lambda", "let",
         "error", "expand", "apply",
         "car", "cdr", "cons",
-        "+", "*", "=",
+        "+", "*", "=", "gensym",
     };
     primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
 

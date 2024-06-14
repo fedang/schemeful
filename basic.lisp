@@ -56,12 +56,12 @@
   (lambdarec f (l)
     (if (nil? l)
       '()
-      (let (b (car (car l)))
-        (let (v (car (cdr (car l))))
+      (let ((b (car (car l)))
+            (v (car (cdr (car l)))))
           (list 'if
                 (if (and (symbol? b) (= b 'else)) t b)
                 v
-                (f (cdr l))))))))
+                (f (cdr l)))))))
 
 ; (cond
 ;   (b v)
