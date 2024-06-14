@@ -7,7 +7,7 @@
 #define ANY_SEXP_IMPLEMENT
 #include "any_sexp.h"
 
-static any_sexp_t primitives = ANY_SEXP_NIL;
+static any_sexp_t builtins = ANY_SEXP_NIL;
 
 // Environment
 //
@@ -61,11 +61,8 @@ bool eval_is_lambda(any_sexp_t sexp)
     any_sexp_t cadr = any_sexp_car(any_sexp_cdr(sexp));
     any_sexp_t cddr = any_sexp_cdr(any_sexp_cdr(sexp));
 
-    return ANY_SEXP_IS_CONS(sexp)
-        && ANY_SEXP_IS_SYMBOL(car)
+    return ANY_SEXP_IS_SYMBOL(car)
         && !strcmp(ANY_SEXP_GET_SYMBOL(car), "lambda")
-        && ANY_SEXP_IS_CONS(cadr)
-        && ANY_SEXP_IS_CONS(cddr)
         && ANY_SEXP_IS_NIL(any_sexp_cdr(cddr))
         && eval_is_symbol_list(cadr);
 }
@@ -106,10 +103,8 @@ bool eval_is_quote(any_sexp_t sexp)
     any_sexp_t car = any_sexp_car(sexp);
     any_sexp_t cdr = any_sexp_cdr(sexp);
 
-    return ANY_SEXP_IS_CONS(sexp)
-        && ANY_SEXP_IS_SYMBOL(car)
+    return ANY_SEXP_IS_SYMBOL(car)
         && !strcmp(ANY_SEXP_GET_SYMBOL(car), "quote")
-        && ANY_SEXP_IS_CONS(cdr)
         && ANY_SEXP_IS_NIL(any_sexp_cdr(cdr));
 }
 
@@ -166,7 +161,7 @@ any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
 {
     if (ANY_SEXP_IS_SYMBOL(sexp)) {
         const char *symbol = ANY_SEXP_GET_SYMBOL(sexp);
-        return eval_find_fvs(symbol, pars) || eval_find_fvs(symbol, primitives)
+        return eval_find_fvs(symbol, pars) || eval_find_fvs(symbol, builtins)
              ? ANY_SEXP_NIL
              : any_sexp_cons(sexp, ANY_SEXP_NIL);
     }
@@ -226,7 +221,7 @@ any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
     any_sexp_t pars = any_sexp_car(lambda);
     any_sexp_t body = any_sexp_car(any_sexp_cdr(lambda));
 
-    any_sexp_t fvs = eval_get_fvs(body, pars);
+    any_sexp_t fvs  = eval_get_fvs(body, pars);
     any_sexp_t copy = eval_copy_fvs(fvs, env);
 
     log_value_trace("Lambda creation",
@@ -267,12 +262,6 @@ any_sexp_t eval_let(any_sexp_t let, any_sexp_t env)
     }
 
     any_sexp_t body_env = eval_let_binds(binds, env);
-
-    log_value_trace("Let bindings",
-                    "g:sexp", let,
-                    "g:binds", binds,
-                    "g:env", body_env);
-
     return ANY_SEXP_IS_ERROR(body_env)
          ? ANY_SEXP_ERROR
          : eval(body, body_env);
@@ -345,85 +334,86 @@ any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, an
     return eval(body, body_env);
 }
 
-any_sexp_t eval_add(any_sexp_t sexp, any_sexp_t env)
+any_sexp_t eval_primitive(any_sexp_t sexp, any_sexp_t env, eval_primitive_t prim)
 {
-    if (ANY_SEXP_IS_NIL(sexp))
-        return any_sexp_number(0);
-
-    if (!ANY_SEXP_IS_CONS(sexp)) {
-        log_error("Malformed call to +");
+    if (!ANY_SEXP_IS_CONS(sexp) || !ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(sexp)))) {
+        log_value_error("Malformed primitive invocation", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
         return ANY_SEXP_ERROR;
     }
 
-    any_sexp_t number = eval(any_sexp_car(sexp), env);
-    if (ANY_SEXP_IS_ERROR(number) || !ANY_SEXP_IS_NUMBER(number)) {
-        log_error("Invalid number passed to +");
-        return ANY_SEXP_ERROR;
-    }
+    any_sexp_t a = eval(CAR(sexp), env);
+    any_sexp_t b = eval(CADR(sexp), env);
 
-    any_sexp_t rest = eval_add(any_sexp_cdr(sexp), env);
-    if (ANY_SEXP_IS_ERROR(rest) || !ANY_SEXP_IS_NUMBER(number))
-        return ANY_SEXP_ERROR;
-
-    return any_sexp_number(ANY_SEXP_GET_NUMBER(number) + ANY_SEXP_GET_NUMBER(rest));
+    return prim(a, b);
 }
 
-any_sexp_t eval_multiply(any_sexp_t sexp, any_sexp_t env)
+static any_sexp_t eval_primitive_add(any_sexp_t a, any_sexp_t b)
 {
-    if (ANY_SEXP_IS_NIL(sexp))
-        return any_sexp_number(1);
-
-    if (!ANY_SEXP_IS_CONS(sexp)) {
-        log_error("Malformed call to *");
+    if (!ANY_SEXP_IS_NUMBER(a) || !ANY_SEXP_IS_NUMBER(b)) {
+        log_error("Add expects two numbers");
         return ANY_SEXP_ERROR;
     }
 
-    any_sexp_t number = eval(any_sexp_car(sexp), env);
-    if (ANY_SEXP_IS_ERROR(number) || !ANY_SEXP_IS_NUMBER(number)) {
-        log_error("Invalid number passed to *");
-        return ANY_SEXP_ERROR;
-    }
-
-    any_sexp_t rest = eval_multiply(any_sexp_cdr(sexp), env);
-    if (ANY_SEXP_IS_ERROR(rest) || !ANY_SEXP_IS_NUMBER(number))
-        return ANY_SEXP_ERROR;
-
-    return any_sexp_number(ANY_SEXP_GET_NUMBER(number) * ANY_SEXP_GET_NUMBER(rest));
+    return any_sexp_number(ANY_SEXP_GET_NUMBER(a) + ANY_SEXP_GET_NUMBER(b));
 }
 
-any_sexp_t eval_equal(any_sexp_t sexp, any_sexp_t env)
+static any_sexp_t eval_primitive_multiply(any_sexp_t a, any_sexp_t b)
 {
-    any_sexp_t cdr = any_sexp_cdr(sexp);
-    any_sexp_t cddr = any_sexp_cdr(cdr);
-
-    if (!ANY_SEXP_IS_CONS(sexp) || !ANY_SEXP_IS_CONS(cdr) || !ANY_SEXP_IS_NIL(cddr)) {
-        log_error("Malformed call to =");
+    if (!ANY_SEXP_IS_NUMBER(a) || !ANY_SEXP_IS_NUMBER(b)) {
+        log_error("Multiply expects two numbers");
         return ANY_SEXP_ERROR;
     }
 
-    any_sexp_t a = eval(any_sexp_car(sexp), env);
-    any_sexp_t b = eval(any_sexp_car(cdr), env);
+    return any_sexp_number(ANY_SEXP_GET_NUMBER(a) * ANY_SEXP_GET_NUMBER(b));
+}
 
+static any_sexp_t eval_primitive_subtract(any_sexp_t a, any_sexp_t b)
+{
+    if (!ANY_SEXP_IS_NUMBER(a) || !ANY_SEXP_IS_NUMBER(b)) {
+        log_error("Subtract expects two numbers");
+        return ANY_SEXP_ERROR;
+    }
+
+    return any_sexp_number(ANY_SEXP_GET_NUMBER(a) - ANY_SEXP_GET_NUMBER(b));
+}
+
+static any_sexp_t eval_primitive_divide(any_sexp_t a, any_sexp_t b)
+{
+    if (!ANY_SEXP_IS_NUMBER(a) || !ANY_SEXP_IS_NUMBER(b)) {
+        log_error("Divide expects two numbers");
+        return ANY_SEXP_ERROR;
+    }
+
+    if (ANY_SEXP_GET_NUMBER(b) == 0) {
+        log_error("Division by zero");
+        return ANY_SEXP_ERROR;
+    }
+
+    return any_sexp_number(ANY_SEXP_GET_NUMBER(a) / ANY_SEXP_GET_NUMBER(b));
+}
+
+static any_sexp_t eval_primitive_equal(any_sexp_t a, any_sexp_t b)
+{
     if (ANY_SEXP_IS_ERROR(a) || ANY_SEXP_IS_ERROR(b))
         return ANY_SEXP_ERROR;
 
     if (ANY_SEXP_IS_STRING(a) && ANY_SEXP_IS_STRING(b))
         return !strcmp(ANY_SEXP_GET_STRING(a), ANY_SEXP_GET_STRING(b))
-             ? any_sexp_number(1)
+             ? T
              : ANY_SEXP_NIL;
 
     if (ANY_SEXP_IS_SYMBOL(a) && ANY_SEXP_IS_SYMBOL(b))
         return !strcmp(ANY_SEXP_GET_SYMBOL(a), ANY_SEXP_GET_SYMBOL(b))
-             ? any_sexp_number(1)
+             ? T
              : ANY_SEXP_NIL;
 
     if (ANY_SEXP_IS_NUMBER(a) && ANY_SEXP_IS_NUMBER(b))
         return ANY_SEXP_GET_NUMBER(a) == ANY_SEXP_GET_NUMBER(b)
-             ? any_sexp_number(1)
+             ? T
              : ANY_SEXP_NIL;
 
     if (ANY_SEXP_IS_NIL(a) || ANY_SEXP_IS_NIL(b))
-        return any_sexp_number(1);
+        return T;
 
     log_error("Incompatible arguments to =");
     return ANY_SEXP_ERROR;
@@ -435,7 +425,7 @@ any_sexp_t eval_print(any_sexp_t sexp, any_sexp_t env)
         return ANY_SEXP_NIL;
 
     if (!ANY_SEXP_IS_CONS(sexp)) {
-        log_error("Malformed call to print");
+        log_value_error("Malformed print", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
         return ANY_SEXP_ERROR;
     }
 
@@ -444,8 +434,7 @@ any_sexp_t eval_print(any_sexp_t sexp, any_sexp_t env)
         return ANY_SEXP_ERROR;
 
     any_sexp_print(value);
-    printf("\n");
-
+    putchar(ANY_SEXP_IS_NIL(any_sexp_cdr(sexp)) ? '\n' : ' ');
     return eval_print(any_sexp_cdr(sexp), env);
 }
 
@@ -455,7 +444,7 @@ any_sexp_t eval_list(any_sexp_t sexp, any_sexp_t env)
         return ANY_SEXP_NIL;
 
     if (!ANY_SEXP_IS_CONS(sexp)) {
-        log_error("Malformed list");
+        log_value_error("Malformed list", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
         return ANY_SEXP_ERROR;
     }
 
@@ -542,25 +531,39 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return eval(sexp, ANY_SEXP_NIL);
         }
 
-        // (+ a b c ...)
+        // (+ a b)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "+")) {
             log_trace("Add");
-            return eval_add(cons->cdr, env);
+            return eval_primitive(cons->cdr, env, eval_primitive_add);
         }
 
-        // (* a b c ...)
+        // (- a b)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "-")) {
+            log_trace("Subtract");
+            return eval_primitive(cons->cdr, env, eval_primitive_subtract);
+        }
+
+        // (* a b)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "*")) {
             log_trace("Multiply");
-            return eval_multiply(cons->cdr, env);
+            return eval_primitive(cons->cdr, env, eval_primitive_multiply);
         }
 
-        // (= a b c ...)
+        // (/ a b)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "/")) {
+            log_trace("Divide");
+            return eval_primitive(cons->cdr, env, eval_primitive_divide);
+        }
+
+        // (= a b)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "=")) {
             log_trace("Equal");
-            return eval_equal(cons->cdr, env);
+            return eval_primitive(cons->cdr, env, eval_primitive_equal);
         }
 
         // (print ...)
@@ -863,21 +866,23 @@ any_sexp_t eval_macro(any_sexp_t sexp, any_sexp_t env, any_sexp_t menv)
     return sexp;
 }
 
-void eval_change_env(any_sexp_t symbol, any_sexp_t value, any_sexp_t env, any_sexp_t *envptr)
+void eval_change_env(any_sexp_t symbol, any_sexp_t value, any_sexp_t *env)
 {
-    if (ANY_SEXP_IS_NIL(env)) {
-        *envptr = any_sexp_cons(any_sexp_cons(symbol, value), *envptr);
+    if (ANY_SEXP_IS_NIL(*env)) {
+        *env = any_sexp_cons(any_sexp_cons(symbol, value), ANY_SEXP_NIL);
         return;
     }
 
-    if (!ANY_SEXP_IS_CONS(env) || !ANY_SEXP_IS_CONS(any_sexp_car(env)))
+    if (!ANY_SEXP_IS_CONS(*env) || !ANY_SEXP_IS_CONS(any_sexp_car(*env)))
         log_panic("Invalid environment");
 
-    any_sexp_cons_t *cons = ANY_SEXP_GET_CONS(any_sexp_car(env));
+    any_sexp_cons_t *cons = ANY_SEXP_GET_CONS(any_sexp_car(*env));
     if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), ANY_SEXP_GET_SYMBOL(symbol)))
         cons->cdr = value;
-    else
-        eval_change_env(symbol, value, any_sexp_cdr(env), envptr);
+    else {
+        cons = ANY_SEXP_GET_CONS(*env);
+        eval_change_env(symbol, value, &cons->cdr);
+    }
 }
 
 any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
@@ -905,7 +910,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
             if (ANY_SEXP_IS_ERROR(value))
                 return ANY_SEXP_ERROR;
 
-            eval_change_env(cadr, value, *env, env);
+            eval_change_env(cadr, value, env);
             return ANY_SEXP_NIL;
         }
 
@@ -925,7 +930,7 @@ any_sexp_t eval_define(any_sexp_t sexp, any_sexp_t *env, any_sexp_t *menv)
             if (ANY_SEXP_IS_ERROR(lambda))
                 return ANY_SEXP_ERROR;
 
-            eval_change_env(cadr, lambda, *menv, menv);
+            eval_change_env(cadr, lambda, menv);
             return ANY_SEXP_NIL;
         }
 
@@ -994,14 +999,6 @@ any_sexp_t eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
     return ANY_SEXP_ERROR;
 }
 
-static any_sexp_t symbol_list(const char *symbols[], size_t n)
-{
-    return n == 0
-         ? ANY_SEXP_NIL
-         : any_sexp_cons(any_sexp_symbol(symbols[n - 1], strlen(symbols[n - 1])),
-                         symbol_list(symbols, n - 1));
-}
-
 void eval_init()
 {
     static const char *symbols[] = {
@@ -1011,10 +1008,12 @@ void eval_init()
         "if", "lambda", "let",
         "error", "expand", "apply",
         "car", "cdr", "cons",
-        "+", "*", "=", "gensym",
+        "+", "*", "=", "gensym", "-", "/"
     };
-    primitives = symbol_list(symbols, sizeof(symbols) / sizeof(*symbols));
+
+    for (size_t i = 0; i < sizeof(symbols) / sizeof(*symbols); i++)
+        builtins = any_sexp_cons(any_sexp_symbol(symbols[i], strlen(symbols[i])), builtins);
 
     log_value_trace("Initialized evaluator",
-                    "g:primitives", ANY_LOG_FORMATTER(any_sexp_fprint), primitives);
+                    "g:builtins", ANY_LOG_FORMATTER(any_sexp_fprint), builtins);
 }

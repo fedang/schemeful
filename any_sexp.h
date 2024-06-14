@@ -335,7 +335,7 @@ any_sexp_t any_sexp_read(any_sexp_reader_t *reader)
 
         buffer[length] = '\0';
 
-        if (number) {
+        if (number && !(length == 1 && buffer[0] == '-')) {
             intptr_t value = strtol(buffer, NULL, 10);
             return any_sexp_number(value);
         }

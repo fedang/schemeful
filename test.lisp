@@ -83,21 +83,20 @@
      (lambda (p)
        (map (lambda (li) (lambda (&rest) (apply (apply li (p p)) &rest))) &rest)))))
 
-(let (even-odd (Y*
+(let ((even-odd (Y*
          (lambda (e o)
            (lambda (n) (or (= n 0) (o (+ n -1)))))
          (lambda (e o)
-           (lambda (n) (and (not (= n 0)) (e (+ n -1)))))))
+           (lambda (n) (and (not (= n 0)) (e (+ n -1))))))))
 
-  (let (ev (car even-odd))
-    (let (od (car (cdr even-odd)))
+  (let ((ev (car even-odd)) (od (car (cdr even-odd))))
       (begin
         (print (list "Even 10" (ev 10)))
         (print (list "Even 11" (ev 11)))
         (print (list "Even 2" (ev 2)))
         (print (list "Odd 4" (od 4)))
         (print (list "Odd 17" (od 17)))
-        (print (list "Odd 3" (od 3)))))))
+        (print (list "Odd 3" (od 3))))))
 
 
 (defmacro s (x y)
@@ -143,3 +142,5 @@
 ;   &rest)))
 ;
 ;(print (quasiquote (a b c)))
+
+(print "hello" "my" "name" "is")

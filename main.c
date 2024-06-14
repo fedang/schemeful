@@ -39,7 +39,7 @@ void repl()
         any_sexp_t value = eval_define(sexp, &env, &menv);
         any_sexp_print(value);
 
-        eval_change_env(any_sexp_symbol("?", 1), value, env, &env);
+        eval_change_env(any_sexp_symbol("?", 1), value, &env);
     }
 
     log_value_info("Eval state",
