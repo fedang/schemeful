@@ -129,3 +129,17 @@
 ;        (print (list "Odd 17" (odd 17)))
 ;        (print (list "Odd 3" (odd 3)))))
 ;
+
+;
+;(defmacro quasiquote (&rest)
+;  (cons 'list ((lambdarec q (l)
+;    (if (nil? l)
+;      '()
+;      (if (cons? l)
+;        (if (and (symbol? (car l)) (= (car l) 'unquote))
+;          (cdr l)
+;          (list 'list (cons (q (car l)) (q (cdr l)))))
+;        (list 'quote l))))
+;   &rest)))
+;
+;(print (quasiquote (a b c)))

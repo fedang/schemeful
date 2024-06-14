@@ -59,7 +59,7 @@
       (let (b (car (car l)))
         (let (v (car (cdr (car l))))
           (list 'if
-                (if (and (symbol? b) (= b 'else)) 1 b)
+                (if (and (symbol? b) (= b 'else)) t b)
                 v
                 (f (cdr l))))))))
 
@@ -69,3 +69,11 @@
 ;   (else v))
 (defmacro cond (&rest)
   (cond-list &rest))
+
+(define symbol=
+  (lambda (a b)
+    (and
+      (symbol? a)
+      (and
+        (symbol? b)
+        (= a b)))))

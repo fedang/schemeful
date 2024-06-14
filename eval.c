@@ -66,22 +66,33 @@ bool eval_is_lambda(any_sexp_t sexp)
         && eval_is_symbol_list(cadr);
 }
 
+bool eval_is_let_list(any_sexp_t sexp)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return true;
+
+    if (!ANY_SEXP_IS_CONS(sexp) || !ANY_SEXP_IS_CONS(any_sexp_car(sexp)))
+        return false;
+
+    any_sexp_t car = any_sexp_car(sexp);
+    return ANY_SEXP_IS_SYMBOL(any_sexp_car(car))
+        && ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(car)))
+        && eval_is_let_list(any_sexp_cdr(sexp));
+}
+
 bool eval_is_let(any_sexp_t sexp)
 {
-    // (cons 'let (cons (cons id (cons value nil)) (cons body nil)))
+    // (cons 'let (cons (cons (cons (cons id (cons value nil)) ...)) (cons body nil)))
     //
     any_sexp_t car = any_sexp_car(sexp);
     any_sexp_t cadr = any_sexp_car(any_sexp_cdr(sexp));
     any_sexp_t cddr = any_sexp_cdr(any_sexp_cdr(sexp));
 
-    return ANY_SEXP_IS_CONS(sexp)
-        && ANY_SEXP_IS_SYMBOL(car)
+    return ANY_SEXP_IS_SYMBOL(car)
         && !strcmp(ANY_SEXP_GET_SYMBOL(car), "let")
-        && ANY_SEXP_IS_CONS(cddr)
         && ANY_SEXP_IS_NIL(any_sexp_cdr(cddr))
         && ANY_SEXP_IS_CONS(cadr)
-        && ANY_SEXP_IS_SYMBOL(any_sexp_car(cadr))
-        && ANY_SEXP_IS_NIL(any_sexp_cdr(any_sexp_cdr(cadr)));
+        && eval_is_let_list(cadr);
 }
 
 bool eval_is_quote(any_sexp_t sexp)
@@ -112,6 +123,22 @@ bool eval_find_fvs(const char *symbol, any_sexp_t fvs)
         || eval_find_fvs(symbol, any_sexp_cdr(fvs));
 }
 
+any_sexp_t eval_get_let_binds(any_sexp_t sexp)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return ANY_SEXP_NIL;
+
+    if (!ANY_SEXP_IS_CONS(sexp))
+        return ANY_SEXP_ERROR;
+
+    any_sexp_t bind = any_sexp_car(any_sexp_car(sexp));
+    any_sexp_t rest = eval_get_let_binds(any_sexp_cdr(sexp));
+
+    return ANY_SEXP_IS_ERROR(rest) || ANY_SEXP_IS_ERROR(bind)
+         ? ANY_SEXP_ERROR
+         : any_sexp_cons(bind, rest);
+}
+
 any_sexp_t eval_merge_fvs(any_sexp_t a, any_sexp_t b)
 {
     if (ANY_SEXP_IS_NIL(a))
@@ -127,6 +154,22 @@ any_sexp_t eval_merge_fvs(any_sexp_t a, any_sexp_t b)
         return eval_merge_fvs(any_sexp_cdr(a), b);
 
     return any_sexp_cons(any_sexp_car(a), eval_merge_fvs(any_sexp_cdr(a), b));
+}
+
+any_sexp_t eval_get_let_fvs(any_sexp_t sexp, any_sexp_t pars)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return ANY_SEXP_NIL;
+
+    if (!ANY_SEXP_IS_CONS(sexp))
+        return ANY_SEXP_ERROR;
+
+    any_sexp_t fvs  = eval_get_fvs(any_sexp_car(sexp), pars);
+    any_sexp_t rest = eval_get_let_fvs(any_sexp_cdr(sexp), pars);
+
+    return ANY_SEXP_IS_ERROR(rest) || ANY_SEXP_IS_ERROR(fvs)
+         ? ANY_SEXP_ERROR
+         : eval_merge_fvs(fvs, rest);
 }
 
 any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
@@ -150,13 +193,11 @@ any_sexp_t eval_get_fvs(any_sexp_t sexp, any_sexp_t pars)
         }
 
         if (eval_is_let(sexp)) {
-            any_sexp_t name  = any_sexp_car(any_sexp_car(any_sexp_cdr(sexp)));
-            any_sexp_t value = any_sexp_car(any_sexp_cdr(any_sexp_car(any_sexp_cdr(sexp))));
+            any_sexp_t binds = eval_get_let_binds(any_sexp_car(any_sexp_cdr(sexp)));
             any_sexp_t body  = any_sexp_car(any_sexp_cdr(any_sexp_cdr(sexp)));
+            any_sexp_t fvs   = eval_get_let_fvs(any_sexp_car(any_sexp_cdr(sexp)), pars);
 
-
-            return eval_merge_fvs(eval_get_fvs(value, pars),
-                                  eval_get_fvs(body, eval_merge_fvs(any_sexp_cons(name, ANY_SEXP_NIL), pars)));
+            return eval_merge_fvs(fvs, eval_get_fvs(body, eval_merge_fvs(binds, pars)));
         }
 
         if (eval_is_quote(sexp))
@@ -208,17 +249,38 @@ any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
          : any_sexp_cons(copy, lambda);
 }
 
-any_sexp_t eval_let(any_sexp_t let, any_sexp_t env)
+any_sexp_t eval_let_binds(any_sexp_t sexp, any_sexp_t env)
 {
-    any_sexp_t name = any_sexp_car(any_sexp_car(let));
-    any_sexp_t sexp = any_sexp_car(any_sexp_cdr(any_sexp_car(let)));
-    any_sexp_t body = any_sexp_car(any_sexp_cdr(let));
+    if (ANY_SEXP_IS_NIL(sexp))
+        return env;
 
-    any_sexp_t value = eval(sexp, env);
-    if (!ANY_SEXP_IS_SYMBOL(name) || ANY_SEXP_IS_ERROR(value) || ANY_SEXP_IS_ERROR(body))
+    if (!ANY_SEXP_IS_CONS(sexp))
         return ANY_SEXP_ERROR;
 
-    return eval(body, any_sexp_cons(any_sexp_cons(name, value), env));
+    any_sexp_t name  = any_sexp_car(any_sexp_car(sexp));
+    any_sexp_t value = eval(any_sexp_car(any_sexp_cdr(any_sexp_car(sexp))), env);
+    any_sexp_t rest  = eval_let_binds(any_sexp_cdr(sexp), env);
+
+    return ANY_SEXP_IS_ERROR(rest) || ANY_SEXP_IS_ERROR(value)
+         ? ANY_SEXP_ERROR
+         : any_sexp_cons(any_sexp_cons(name, value), rest);
+}
+
+any_sexp_t eval_let(any_sexp_t let, any_sexp_t env)
+{
+    any_sexp_t binds = any_sexp_car(let);
+    any_sexp_t body = any_sexp_car(any_sexp_cdr(let));
+
+    if (ANY_SEXP_IS_NIL(binds)) {
+        log_error("Let needs at least one binding");
+        return ANY_SEXP_ERROR;
+    }
+
+    any_sexp_t body_env = eval_let_binds(binds, env);
+
+    return ANY_SEXP_IS_ERROR(body_env)
+         ? ANY_SEXP_ERROR
+         : eval(body, body_env);
 }
 
 any_sexp_t eval_begin(any_sexp_t list, any_sexp_t env)
