@@ -144,3 +144,9 @@
 ;(print (quasiquote (a b c)))
 
 (print "hello" "my" "name" "is")
+
+
+(print 'hello)
+;(print (quasiquote a))
+;
+;(letrec ((a (lambda (n) n)) (b (lambda (x) x))) a)

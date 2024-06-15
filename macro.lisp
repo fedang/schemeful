@@ -57,38 +57,79 @@
         (list 'lambda ss (car es))
         (f ss (cdr es))))))
 
-(define letrec-lets
-  (lambdarec f (ss n body)
+(define letrec-vars
+  (lambdarec f (ss n tmp)
     (if (nil? ss)
-      body
-      (list 'let (list (car ss) (list 'get 'tmp n))
-        (f (cdr ss) (+ 1 n) body)))))
+      '()
+      (cons
+        (list (car ss) (list 'get tmp n))
+        (f (cdr ss) (+ 1 n) tmp)))))
+
 
 (defmacro letrec (vs body)
-  (let (bs (letrec-bindings vs))
+  (let ((bs (letrec-bindings vs))
+        (tmp (gensym)))
     (list 'let
-          (list 'tmp
-            (cons 'Y*
-                  (letrec-lambdas (car bs) (cdr bs))))
-            (letrec-lets (car bs) 0 body))))
+          (list
+            (list tmp
+                  (cons 'Y* (letrec-lambdas (car bs) (cdr bs)))))
+          (list 'let (letrec-vars (car bs) 0 tmp) body))))
 
 ;; Quasiquote
 ;; TODO!
-;(defmacro unquote (&rest)
-;  (error "Invalid unquote"))
-;
-;(defmacro quasiquote (&rest)
-;  (cons 'list ((lambdarec q (l)
-;    (if (nil? l)
-;      '()
-;      (if (cons? l)
-;        (if (and (symbol? (car l)) (= (car l) 'unquote))
-;          (cdr l)
-;          (list 'list (cons (q (car l)) (q (cdr l)))))
-;        (list 'quote l))))
-;   &rest)))
-;
-;(print (quasiquote (a b c)))
-;
-;(define qq-expand
-;  (lambda ()))
+(defmacro unquote (&rest)
+  (error "Invalid unquote"))
+
+(defmacro unquote-splicing (&rest)
+  (error "Invalid unquote-splicing"))
+
+; qq-expand algorithm from the paper
+; "Quasiquotation in Lisp", Alan Bawden
+
+(defmacro quasiquote (l)
+  (letrec
+    ((qq-expand
+       (lambda (l depth)
+         (if (cons? l)
+           (cond
+             ((symbol= (car l) 'quasiquote)
+              (cons 'quasiquote (qq-expand (cdr l) (+ depth 1))))
+             ((or (symbol= (car l) 'unquote) (symbol= (car l) 'unquote-splicing))
+              (cond
+                ((> depth 0)
+                 (cons (list 'quote (car l)) (qq-expand (cdr l) (- depth 1))))
+                ((and (symbol= 'unquote (car l))
+                      (and (not (nil? (cdr l)))
+                           (nil? (cddr l))))
+                 (cadr l))
+                (else
+                  (error "Illegal unquoting"))))
+             (else
+               (append (qq-expand-list (car l) depth)
+                       (qq-expand (cdr l) depth))))
+           (list 'quote l))))
+     (qq-expand-list
+       (lambda (l depth)
+         (if (cons? l)
+           (cond
+             ((symbol= (car l) 'quasiquote)
+              (list (cons 'quasiquote (qq-expand (cdr l) (+ depth 1)))))
+             ((or (symbol= (car l) 'unquote) (symbol= (car l) 'unquote-splicing))
+              (cond
+                ((> depth 0)
+                 (list (cons (list 'quote (car l)) (qq-expand (cdr l) (- depth 1)))))
+                ((symbol= (car l) 'unquote)
+                 (list 'quote (cdr l)))
+                (else
+                  (list 'quote (append (cdr l))))))
+             (else
+               (list (append (qq-expand-list (car l) depth)
+                             (qq-expand (cdr l) depth)))))
+           (list 'quote (list l))))))
+    (qq-expand l 0)))
+
+(print (quasiquote a))
+(define a 1)
+(print (quasiquote (unquote a)))
+
+(print (quasiquote (a b c)))

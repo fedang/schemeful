@@ -226,8 +226,8 @@ any_sexp_t eval_lambda(any_sexp_t lambda, any_sexp_t env)
 
     log_value_trace("Lambda creation",
                     "g:pars", ANY_LOG_FORMATTER(any_sexp_fprint), pars,
-                    "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body,
-                    "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs);
+                    "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs,
+                    "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body);
 
     return ANY_SEXP_IS_ERROR(fvs) || ANY_SEXP_IS_ERROR(copy)
          ? ANY_SEXP_ERROR
@@ -320,9 +320,9 @@ any_sexp_t eval_append_env(any_sexp_t pars, any_sexp_t args, any_sexp_t fvs)
 any_sexp_t eval_lambda_call(any_sexp_t fvs, any_sexp_t pars, any_sexp_t args, any_sexp_t body)
 {
     log_value_trace("Lambda call",
-                    "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs,
                     "g:pars", ANY_LOG_FORMATTER(any_sexp_fprint), pars,
                     "g:args", ANY_LOG_FORMATTER(any_sexp_fprint), args,
+                    "g:fvs",  ANY_LOG_FORMATTER(any_sexp_fprint), fvs,
                     "g:body", ANY_LOG_FORMATTER(any_sexp_fprint), body);
 
     // Update the environment with the arguments
@@ -390,6 +390,16 @@ static any_sexp_t eval_primitive_divide(any_sexp_t a, any_sexp_t b)
     }
 
     return any_sexp_number(ANY_SEXP_GET_NUMBER(a) / ANY_SEXP_GET_NUMBER(b));
+}
+
+static any_sexp_t eval_primitive_greater(any_sexp_t a, any_sexp_t b)
+{
+    if (!ANY_SEXP_IS_NUMBER(a) || !ANY_SEXP_IS_NUMBER(b)) {
+        log_error("Greater expects two numbers");
+        return ANY_SEXP_ERROR;
+    }
+
+    return any_sexp_number(ANY_SEXP_GET_NUMBER(a) > ANY_SEXP_GET_NUMBER(b));
 }
 
 static any_sexp_t eval_primitive_equal(any_sexp_t a, any_sexp_t b)
@@ -557,6 +567,13 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "/")) {
             log_trace("Divide");
             return eval_primitive(cons->cdr, env, eval_primitive_divide);
+        }
+
+        // (> a b)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), ">")) {
+            log_trace("Greater");
+            return eval_primitive(cons->cdr, env, eval_primitive_greater);
         }
 
         // (= a b)
@@ -1008,7 +1025,8 @@ void eval_init()
         "if", "lambda", "let",
         "error", "expand", "apply",
         "car", "cdr", "cons",
-        "+", "*", "=", "gensym", "-", "/"
+        "+", "*", "=", ">", "-", "/",
+        "gensym",
     };
 
     for (size_t i = 0; i < sizeof(symbols) / sizeof(*symbols); i++)
