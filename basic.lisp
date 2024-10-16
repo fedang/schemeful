@@ -52,6 +52,12 @@
 (defmacro or (a b)
   (list 'if a 1 b))
 
+(defmacro when (a &rest)
+  (list 'if a (list* 'begin &rest) '()))
+
+(defmacro unless (a &rest)
+  (list 'if a '() (list* 'begin &rest)))
+
 (define cond-list
   (lambdarec f (l)
     (if (nil? l)
@@ -77,3 +83,13 @@
       (and
         (symbol? b)
         (= a b)))))
+
+(define print-tag
+  (lambda (x)
+    (cond
+      ((nil? x) (print "nil-tag"))
+      ((cons? x) (print "cons-tag"))
+      ((symbol? x) (print "symbol-tag"))
+      ((string? x) (print "string-tag"))
+      ((number? x) (print "number-tag"))
+      (else (error "Impossible")))))

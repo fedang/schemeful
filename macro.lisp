@@ -76,60 +76,56 @@
           (list 'let (letrec-vars (car bs) 0 tmp) body))))
 
 ;; Quasiquote
-;; TODO!
+
 (defmacro unquote (&rest)
-  (error "Invalid unquote"))
+  (error "Invalid unquote outside of quasiquote"))
 
 (defmacro unquote-splicing (&rest)
-  (error "Invalid unquote-splicing"))
+  (error "Invalid unquote-splicing outside of quasiquote"))
 
-; qq-expand algorithm from the paper
-; "Quasiquotation in Lisp", Alan Bawden
+; Implementation based on the one by Kent Dybvig
 
-(defmacro quasiquote (l)
-  (letrec
-    ((qq-expand
-       (lambda (l depth)
-         (if (cons? l)
-           (cond
-             ((symbol= (car l) 'quasiquote)
-              (cons 'quasiquote (qq-expand (cdr l) (+ depth 1))))
-             ((or (symbol= (car l) 'unquote) (symbol= (car l) 'unquote-splicing))
-              (cond
-                ((> depth 0)
-                 (cons (list 'quote (car l)) (qq-expand (cdr l) (- depth 1))))
-                ((and (symbol= 'unquote (car l))
-                      (and (not (nil? (cdr l)))
-                           (nil? (cddr l))))
-                 (cadr l))
-                (else
-                  (error "Illegal unquoting"))))
-             (else
-               (append (qq-expand-list (car l) depth)
-                       (qq-expand (cdr l) depth))))
-           (list 'quote l))))
-     (qq-expand-list
-       (lambda (l depth)
-         (if (cons? l)
-           (cond
-             ((symbol= (car l) 'quasiquote)
-              (list (cons 'quasiquote (qq-expand (cdr l) (+ depth 1)))))
-             ((or (symbol= (car l) 'unquote) (symbol= (car l) 'unquote-splicing))
-              (cond
-                ((> depth 0)
-                 (list (cons (list 'quote (car l)) (qq-expand (cdr l) (- depth 1)))))
-                ((symbol= (car l) 'unquote)
-                 (list 'quote (cdr l)))
-                (else
-                  (list 'quote (append (cdr l))))))
-             (else
-               (list (append (qq-expand-list (car l) depth)
-                             (qq-expand (cdr l) depth)))))
-           (list 'quote (list l))))))
-    (qq-expand l 0)))
-
-(print (quasiquote a))
-(define a 1)
-(print (quasiquote (unquote a)))
-
-(print (quasiquote (a b c)))
+(defmacro quasiquote (x)
+  (let
+    ((check
+       (lambda (x)
+         (lambda (x)
+           (unless
+             (and (cons? (cdr x)) (nil? (cddr x)))
+             (error x))))))
+    (letrec
+     ((qq-expand
+       (lambda (x)
+         (cond
+           ((not (cons? x)) (list 'quote x))
+           ((symbol= (car x) 'quasiquote)
+              (begin
+                (check x)
+                (qq-expand (qq-expand (cadr x)))))
+           ((symbol= (car x) 'unquote)
+              (begin
+                (check x)
+                (cadr x)))
+           ((symbol= (car x) 'unquote-splicing)
+              (error "invalid context for unquote-splicing"))
+            ((and (cons? (car x)) (symbol= (caar x) 'unquote-splicing))
+             (begin
+               (check (car x))
+               (let ((d (qq-expand (cdr x))))
+                 (if (and (symbol= (car d) 'quote) (nil? (cdr d)))
+                    (cadar x)
+                    (list 'append (cadar x) d)))))
+            (else
+             (let ((a (qq-expand (car x))) (d (qq-expand (cdr x))))
+                (if (cons? d)
+                    (if (symbol= (car d) 'quote)
+                        (if (and (cons? a) (symbol= (car a) 'quote))
+                          (list 'quote (cons (cadr a) (cadr d)))
+                            (if (nil? (cadr d))
+                                (list 'list a)
+                                (list 'list* a d)))
+                        (if (or (symbol= (car d) 'list) (symbol= (car d) 'list))
+                          (list* (car d) a (cdr d))
+                          (list 'list* a d)))
+                   (list 'list* a d))))))))
+      (qq-expand x))))

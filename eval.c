@@ -465,6 +465,25 @@ any_sexp_t eval_list(any_sexp_t sexp, any_sexp_t env)
     return any_sexp_cons(value, eval_list(any_sexp_cdr(sexp), env));
 }
 
+any_sexp_t eval_list2(any_sexp_t sexp, any_sexp_t env)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return ANY_SEXP_NIL;
+
+    if (!ANY_SEXP_IS_CONS(sexp)) {
+        log_value_error("Malformed list", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
+        return ANY_SEXP_ERROR;
+    }
+
+    any_sexp_t value = eval(any_sexp_car(sexp), env);
+    if (ANY_SEXP_IS_ERROR(value))
+        return ANY_SEXP_ERROR;
+
+    return ANY_SEXP_IS_NIL(any_sexp_cdr(sexp))
+        ? value
+        : any_sexp_cons(value, eval_list2(any_sexp_cdr(sexp), env));
+}
+
 any_sexp_t eval_if(any_sexp_t sexp, any_sexp_t env)
 {
     any_sexp_t car = any_sexp_car(sexp);
@@ -597,6 +616,13 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             return eval_list(cons->cdr, env);
         }
 
+        // (list* ...)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "list*")) {
+            log_trace("List*");
+            return eval_list2(cons->cdr, env);
+        }
+
         // (tag? x)
         //
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "tag?")) {
@@ -620,7 +646,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             log_trace("Car");
             any_sexp_t list = eval(any_sexp_car(cons->cdr), env);
             if (!ANY_SEXP_IS_CONS(list)) {
-                log_error("Expected cons");
+                log_value_error("Expected cons (car)", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), list);
                 return ANY_SEXP_ERROR;
             }
 
@@ -638,7 +664,7 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
             log_trace("Cdr");
             any_sexp_t list = eval(any_sexp_car(cons->cdr), env);
             if (!ANY_SEXP_IS_CONS(list)) {
-                log_error("Expected cons");
+                log_value_error("Expected cons (cdr)", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), list);
                 return ANY_SEXP_ERROR;
             }
 
@@ -1019,7 +1045,7 @@ any_sexp_t eval_file(FILE *file, any_sexp_t *env, any_sexp_t *menv)
 void eval_init()
 {
     static const char *symbols[] = {
-        "include", "begin", "list",
+        "include", "begin", "list", "list*",
         "quote", "defmacro", "define",
         "print", "eval", "tag?",
         "if", "lambda", "let",
