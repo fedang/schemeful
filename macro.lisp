@@ -92,40 +92,40 @@
          (lambda (x)
            (unless
              (and (cons? (cdr x)) (nil? (cddr x)))
-             (error x))))))
+             (error "Invalid form" x))))))
     (letrec
-     ((qq-expand
-       (lambda (x)
-         (cond
-           ((not (cons? x)) (list 'quote x))
-           ((symbol= (car x) 'quasiquote)
+      ((qq-expand
+         (lambda (x)
+           (cond
+             ((not (cons? x)) (list 'quote x))
+             ((symbol= (car x) 'quasiquote)
               (begin
                 (check x)
                 (qq-expand (qq-expand (cadr x)))))
-           ((symbol= (car x) 'unquote)
+             ((symbol= (car x) 'unquote)
               (begin
                 (check x)
                 (cadr x)))
-           ((symbol= (car x) 'unquote-splicing)
+             ((symbol= (car x) 'unquote-splicing)
               (error "invalid context for unquote-splicing"))
-            ((and (cons? (car x)) (symbol= (caar x) 'unquote-splicing))
-             (begin
-               (check (car x))
-               (let ((d (qq-expand (cdr x))))
-                 (if (and (symbol= (car d) 'quote) (nil? (cdr d)))
+             ((and (cons? (car x)) (symbol= (caar x) 'unquote-splicing))
+              (begin
+                (check (car x))
+                (let ((d (qq-expand (cdr x))))
+                  (if (and (symbol= (car d) 'quote) (nil? (cdr d)))
                     (cadar x)
                     (list 'append (cadar x) d)))))
-            (else
-             (let ((a (qq-expand (car x))) (d (qq-expand (cdr x))))
-                (if (cons? d)
-                    (if (symbol= (car d) 'quote)
-                        (if (and (cons? a) (symbol= (car a) 'quote))
-                          (list 'quote (cons (cadr a) (cadr d)))
-                            (if (nil? (cadr d))
-                                (list 'list a)
-                                (list 'list* a d)))
-                        (if (or (symbol= (car d) 'list) (symbol= (car d) 'list))
-                          (list* (car d) a (cdr d))
-                          (list 'list* a d)))
+             (else
+               (let ((a (qq-expand (car x))) (d (qq-expand (cdr x))))
+                 (if (cons? d)
+                   (if (symbol= (car d) 'quote)
+                     (if (and (cons? a) (symbol= (car a) 'quote))
+                       (list 'quote (cons (cadr a) (cadr d)))
+                       (if (nil? (cadr d))
+                         (list 'list a)
+                         (list 'list* a d)))
+                     (if (or (symbol= (car d) 'list) (symbol= (car d) 'list))
+                       (list* (car d) a (cdr d))
+                       (list 'list* a d)))
                    (list 'list* a d))))))))
       (qq-expand x))))
