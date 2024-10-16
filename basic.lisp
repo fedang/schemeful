@@ -93,3 +93,13 @@
       ((string? x) (print "string-tag"))
       ((number? x) (print "number-tag"))
       (else (error "Impossible")))))
+
+(define equal?
+  (lambdarec f (a b)
+    (cond
+      ((not (= (tag? a) (tag? b))) nil)
+      ((cons? a)
+       (and
+         (f (car a) (car b))
+         (f (cdr a) (cdr b))))
+      (else (= a b)))))

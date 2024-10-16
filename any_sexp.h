@@ -52,7 +52,7 @@ typedef struct any_sexp {
 #define ANY_SEXP_ERROR ((any_sexp_t) { .tag = ANY_SEXP_TAG_ERROR })
 #define ANY_SEXP_NIL   ((any_sexp_t) { .tag = ANY_SEXP_TAG_NIL })
 
-#define ANY_SEXP_GET_TAG(sexp)    ((sexp).tag)
+#define ANY_SEXP_GET_TAG(sexp)    ((uintptr_t)(sexp).tag)
 #define ANY_SEXP_GET_CONS(sexp)   ((sexp).cons)
 #define ANY_SEXP_GET_SYMBOL(sexp) ((sexp).symbol)
 #define ANY_SEXP_GET_STRING(sexp) ((sexp).symbol)
