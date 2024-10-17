@@ -141,12 +141,19 @@ any_sexp_t any_sexp_read(any_sexp_reader_t *reader);
 
 #ifndef ANY_SEXP_NO_WRITER
 
+#ifndef ANY_SEXP_WRITER_DEFAULT
+#define ANY_SEXP_WRITER_DEFAULT 0
+#endif
+
+#define ANY_SEXP_WRITER_BARE_STRING (1 << 0)
+
 typedef struct {
     any_sexp_putchar_t putc;
     void *stream;
+    int flags;
 } any_sexp_writer_t;
 
-void any_sexp_writer_init(any_sexp_writer_t *writer, any_sexp_putchar_t putc, void *stream);
+void any_sexp_writer_init(any_sexp_writer_t *writer, any_sexp_putchar_t putc, void *stream, int flags);
 
 int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp);
 
@@ -429,10 +436,11 @@ static int any_sexp_writer_putnum(any_sexp_writer_t *writer, intptr_t value)
     return c + 1;
 }
 
-void any_sexp_writer_init(any_sexp_writer_t *writer, any_sexp_putchar_t putc, void *stream)
+void any_sexp_writer_init(any_sexp_writer_t *writer, any_sexp_putchar_t putc, void *stream, int flags)
 {
     writer->putc = putc;
     writer->stream = stream;
+    writer->flags = flags;
 }
 
 int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp)
@@ -498,17 +506,19 @@ int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp)
             return any_sexp_writer_puts(writer, ANY_SEXP_GET_SYMBOL(sexp));
 
         case ANY_SEXP_TAG_STRING: {
-            if (writer->putc(ANY_SEXP_CHAR_STRING, writer->stream) == EOF)
+            bool bare = (writer->flags & ANY_SEXP_WRITER_BARE_STRING) != 0;
+
+            if (!bare && writer->putc(ANY_SEXP_CHAR_STRING, writer->stream) == EOF)
                 return EOF;
 
             int c = any_sexp_writer_puts(writer, ANY_SEXP_GET_STRING(sexp));
             if (c == EOF)
                 return EOF;
 
-            if (writer->putc(ANY_SEXP_CHAR_STRING, writer->stream) == EOF)
+            if (!bare && writer->putc(ANY_SEXP_CHAR_STRING, writer->stream) == EOF)
                 return EOF;
 
-            return c + 2;
+            return c + 2 * bare;
         }
 
         case ANY_SEXP_TAG_NUMBER: {
@@ -529,7 +539,7 @@ int any_sexp_write(any_sexp_writer_t *writer, any_sexp_t sexp)
 int any_sexp_fprint(FILE *file, any_sexp_t sexp)
 {
     any_sexp_writer_t writer;
-    any_sexp_writer_init(&writer, (any_sexp_putchar_t)fputc, file);
+    any_sexp_writer_init(&writer, (any_sexp_putchar_t)fputc, file, ANY_SEXP_WRITER_DEFAULT);
     return any_sexp_write(&writer, sexp);
 }
 

@@ -444,8 +444,34 @@ any_sexp_t eval_print(any_sexp_t sexp, any_sexp_t env)
         return ANY_SEXP_ERROR;
 
     any_sexp_print(value);
-    putchar(ANY_SEXP_IS_NIL(any_sexp_cdr(sexp)) ? '\n' : ' ');
+    if (!ANY_SEXP_IS_NIL(any_sexp_cdr(sexp)))
+        putchar(' ');
+
     return eval_print(any_sexp_cdr(sexp), env);
+}
+
+any_sexp_t eval_display(any_sexp_t sexp, any_sexp_t env)
+{
+    if (ANY_SEXP_IS_NIL(sexp))
+        return ANY_SEXP_NIL;
+
+    if (!ANY_SEXP_IS_CONS(sexp)) {
+        log_value_error("Malformed print", "g:sexp", ANY_LOG_FORMATTER(any_sexp_fprint), sexp);
+        return ANY_SEXP_ERROR;
+    }
+
+    any_sexp_t value = eval(any_sexp_car(sexp), env);
+    if (ANY_SEXP_IS_ERROR(value))
+        return ANY_SEXP_ERROR;
+
+    any_sexp_writer_t writer;
+    any_sexp_writer_init(&writer, (any_sexp_putchar_t)fputc, stdout, ANY_SEXP_WRITER_BARE_STRING);
+    any_sexp_write(&writer, value);
+
+    if (!ANY_SEXP_IS_NIL(any_sexp_cdr(sexp)))
+        putchar(' ');
+
+    return eval_display(any_sexp_cdr(sexp), env);
 }
 
 any_sexp_t eval_list(any_sexp_t sexp, any_sexp_t env)
@@ -607,6 +633,13 @@ any_sexp_t eval_cons(any_sexp_t sexp, any_sexp_t env)
         if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "print")) {
             log_trace("Print");
             return eval_print(cons->cdr, env);
+        }
+
+        // (display ...)
+        //
+        if (!strcmp(ANY_SEXP_GET_SYMBOL(cons->car), "display")) {
+            log_trace("Display");
+            return eval_display(cons->cdr, env);
         }
 
         // (list ...)
@@ -1052,7 +1085,7 @@ void eval_init()
         "error", "expand", "apply",
         "car", "cdr", "cons",
         "+", "*", "=", ">", "-", "/",
-        "gensym",
+        "gensym", "display",
     };
 
     for (size_t i = 0; i < sizeof(symbols) / sizeof(*symbols); i++)
