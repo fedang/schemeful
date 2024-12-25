@@ -1,4 +1,4 @@
-(include "list.lisp")
+(include "list.scm")
 
 ;; Let*
 ;; Linear let evaluation

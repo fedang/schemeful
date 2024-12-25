@@ -1,4 +1,4 @@
-(include "macro.lisp")
+(include "macro.scm")
 
 (print (quasiquote a))
 (define a 1)

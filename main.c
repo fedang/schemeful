@@ -48,8 +48,7 @@ void repl_loop(any_sexp_t *env, any_sexp_t *menv)
 
 void repl_start()
 {
-    printf("My own little lisp :)\n");
-
+    printf("A totally non compliant scheme-like language ;)\n");
     eval_init();
 
     any_sexp_t env = ANY_SEXP_NIL, menv = ANY_SEXP_NIL;

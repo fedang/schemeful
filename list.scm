@@ -1,4 +1,4 @@
-(include "basic.lisp")
+(include "basic.scm")
 
 ;; Lists
 
